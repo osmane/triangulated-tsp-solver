@@ -1,0 +1,2788 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Triangulated TSP Solver</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: center;
+            height: 100vh;
+            gap: 20px;
+            margin: 20px;
+            padding: 0;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 300px;
+            /* Kontroller için sabit genişlik */
+        }
+
+        #canvasContainer {
+            flex: 1;
+            height: 96vh;
+            /* Ekranın %80 yüksekliği */
+            overflow: auto;
+            border: 1px solid black;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            resize: vertical;
+        }
+
+        #mouseCoords {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        canvas {
+            /*border: 1px solid black;
+            width: 300px;
+            height: 300px;*/
+            display: block;
+        }
+
+        #viewPos {
+            width: 6em;
+            box-sizing: border-box;
+        }
+
+        .view-position-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            white-space: nowrap;
+        }
+
+        .view-position-row>label {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex: 0 0 auto;
+        }
+
+        #viewPosXmlMatch {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .point-xml-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .point-xml-buttons button {
+            flex: 1;
+        }
+
+        .dbwc-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            padding-block: 4px;
+        }
+
+        .dbwc-controls button {
+            min-width: 0;
+        }
+
+        .dbwc-controls label {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        #dbwcTimeLimit,
+        #dbwcWorkBudget {
+            width: 7em;
+        }
+
+        #btnDbwcCancel {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="controls">
+        <div id="mouseCoords">Mouse Coordinates: (x, y)</div>
+        <label><input type="checkbox" id="randomPoints"> Generate Random Vertices</label>
+        <label for="pointCount">Vertices Count</label>
+        <input type="number" id="pointCount" value="15" min="3" max="100000">
+        <label for="xmlInput">XML Coordinates:</label>
+        <textarea id="xmlInput" placeholder=""></textarea>
+        <button onclick="generatePoints()">Raw Route</button>
+        <button id="btn-koptStart">K-opt Start</button>
+        <button onclick="runBranchedDoubleBridgeOptimization()">Branched Double Bridge</button>
+        <button onclick="runKoptThenBranchedDoubleBridgeOptimization()">K-opt + Branched Double Bridge</button>
+        <button id="btn-geometricRepair" onclick="runGeometricRepair()">Geometric Repair (experimental)</button>
+        <button id="btn-iterativeRandomVisibilityRepair" onclick="runIterativeRandomVisibilityRepair()">Iterative Random Visibility Repair (experimental)</button>
+        <button id="btn-kbdbGeometricRepair" onclick="runKbdbAndGeometricRepair()">KBDB + Geometric Repair (experimental)</button>
+        <button id="btn-kbdbGrFourOpt" onclick="runKbdbGrFourOpt()">KBDB + GR + 4opt (experimental)</button>
+        <button id="btn-kbdbGrFourOptExtended" onclick="runKbdbGrFourOpt(true)">KBDB + GR + 4opt + bridge/deep (experimental)</button>
+        <div class="dbwc-controls">
+            <button id="btnDbwcFast" onclick="runDbwcMode('fast')">DBWC Fast: Hilbert + Delaunay LK + v1f</button>
+            <button id="btnDbwcQuality" onclick="runDbwcMode('quality')">DBWC Quality: full pipeline + v4</button>
+            <button id="btnRrTime" onclick="runDbwcMode('rr-time')" title="Applied to the live tour (run DBWC Quality first). 30 perturbed 2-factor unions + exact solve inside U; uses the DBWC time limit.">Region Reversal: time-budgeted (2-factor union + exact)</button>
+            <button id="btnRrBounded" onclick="runDbwcMode('rr-bounded')" title="Applied to the live tour (run DBWC Quality first). Same union + deep chain on the U candidate graph; search work capped at 5000·n^1.7.">Region Reversal: bounded (n^1.7 work, deep chain)</button>
+            <label for="dbwcTimeLimit">DBWC time limit (s)
+                <input type="number" id="dbwcTimeLimit" value="120" min="5" max="3600" step="5">
+            </label>
+            <label for="dbwcWorkMeter">Full work metering (instrumented, slow)
+                <input type="checkbox" id="dbwcWorkMeter">
+            </label>
+            <label for="dbwcWorkBudget">Work budget (million steps; empty = unlimited)
+                <input type="number" id="dbwcWorkBudget" min="0" step="1" placeholder="unlimited">
+            </label>
+            <button id="btnDbwcCancel" onclick="cancelDbwcRun()" disabled>Stop DBWC</button>
+        </div>
+        <button onclick="runAdjacentBlockSwap()">Swap Adjacent Blocks</button>
+        <button onclick="runPairedChainRepair()">Paired Chain Repair (slow)</button>
+        <button onclick="objectOcc()">Find Visible (Object Occlusion)</button>
+        <button onclick="runConvexLayers()">Convex Layers</button>
+        <button onclick="runMergeLayers()">Merge Layers</button>
+        <div class="point-xml-buttons">
+            <button onclick="copyPoints()">Copy Points</button>
+            <button onclick="pastePoints()">Paste Points</button>
+        </div>
+        <button id="btn-disconnect">Disconnect Selected Point</button>
+        <button onclick="runExactTsp()">Exact TSP (optimal tour)</button>
+        <button id="btnExactCancel" onclick="cancelExactTsp()" disabled>Stop Exact TSP</button>
+        <div class="view-position-row">
+            <label for="viewPos">Viewing position:<input type="number" value="0" min="0" id="viewPos"></label>
+            <span id="viewPosXmlMatch" title="Matching XML NoktaNo" aria-live="polite">XML: —</span>
+        </div>
+        <label><input type="checkbox" id="koptMode"> K-opt Mode</label>
+        <label><input type="checkbox" id="chkCornerToCorner"> Connect Points</label>
+        <label><input type="checkbox" id="chkViewVisibles"> View Occlusion Points</label>
+        <div id="triInfo"></div>
+        <div id="kenar0Info"></div>
+        <div id="kenar1Info"></div>
+        <div id="kenar2Info"></div>
+        <div id="ilkKesilenDisKenar"></div>
+        <pre id="doubleBridgeReport"></pre>
+    </div>
+
+    <div id="canvasContainer">
+        <canvas id="canvas" width="1501" height="851"></canvas>
+    </div>
+
+    <script>
+        const xml = `<Points>
+    <P X="658" Y="55" />
+    <P X="219" Y="52" />
+    <P X="228" Y="641" />
+    ...
+</Points>`;
+        document.getElementById("xmlInput").placeholder = xml;
+    </script>
+
+    <script src="js/core/classes.js"></script>
+    <script src="js/core/helper.js"></script>
+    <script src="js/core/query.js"></script>
+    <script src="js/core/create.js"></script>
+    <script src="js/core/createHelper.js"></script>
+    <script src="js/core/modify.js"></script>
+    <script src="js/tsp/convexLayers.js"></script>
+    <script src="js/exact/exactTsp.js"></script>
+    <script src="js/core/worldBuilder.js"></script>
+    <script src="js/core/objectOcclusion.js"></script>
+    <script src="js/core/objectOccShared.js"></script>
+    <script src="js/tsp/doubleBridge.js"></script>
+    <script src="js/tsp/pocketAnalyzer.js"></script>
+    <script src="js/core/visibilityPatch.js"></script>
+    <script src="js/tsp/routeTransaction.js"></script>
+    <script src="js/tsp/k_optHelper.js"></script>
+    <script src="js/tsp/k_optShortestRoute.js"></script>
+    <script src="js/tsp/doubleBridgeOptimizer.js"></script>
+    <script src="js/tsp/geometricRepair.js"></script>
+    <script src="js/tsp/iterativeRandomVisibilityRepair.js"></script>
+    <script src="js/tsp/kbdbGeometricRepair.js"></script>
+    <script src="js/tsp/fourOptRepair.js"></script>
+    <script src="js/tsp/adjacentBlockSwap.js"></script>
+    <script src="js/tsp/pairedChainRepair.js"></script>
+    <script src="js/dbwc/dbwcCore.js"></script>
+    <script src="js/dbwc/pointSetContract.js"></script>
+    <script>
+
+        const canvasContainer = document.getElementById('canvasContainer');
+        const canvas = document.getElementById("canvas");
+        const mouseCoords = document.getElementById('mouseCoords');
+        const triInfo = document.getElementById('triInfo');
+        const kenar0Info = document.getElementById('kenar0Info');
+        const kenar1Info = document.getElementById('kenar1Info');
+        const kenar2Info = document.getElementById('kenar2Info');
+        const ilkKesilenDisKenar = document.getElementById('ilkKesilenDisKenar');
+        const viewPos = document.getElementById('viewPos');
+        const viewPosXmlMatch = document.getElementById('viewPosXmlMatch');
+        const chkViewVisibles = document.getElementById('chkViewVisibles');
+        const btnDisconnect = document.getElementById('btn-disconnect');
+        const btnkoptStart = document.getElementById('btn-koptStart');
+
+
+        const ctx = canvas.getContext("2d");
+
+        //ctx.scale(dpr, dpr);  // *** Scale context for sharp rendering
+        //ctx.translate(1, 1); // *** Align to pixel grid
+
+        // World sınıfını başlatma
+        let world = new World();
+        let dbwcPreviewTour = null;
+        let sonCizilenUcgen = null;
+        let ilkNoktaDegisti = false;
+        let PolyMoveEnabled = false;
+        let CornerToCorner = false;
+        let isCursorOverCanvas = false;
+        //let connectibleNoktalar = new Set();
+        const CANVAS_PADDING = 20;
+        const DEFAULT_RANDOM_POLY_NO = 0;
+        const MAX_CLOSE_ATTEMPTS = 15000; // Poligon kapatma deneme limiti
+
+        // MAX_GENERATION_ATTEMPTS, MAX_CLOSE_ATTEMPTS ile aynı, isterseniz ayrı bir sabit de olabilir.
+        const XML_POINT_TAG = "P";
+        const XML_ATTR_X = "X";
+        const XML_ATTR_Y = "Y";
+        const XML_ATTR_POLYNO = "PolyNo";
+        const XML_ATTR_POINT_ID = "NoktaNo";
+        const XML_ATTR_METRIC_X = "MetricX";
+        const XML_ATTR_METRIC_Y = "MetricY";
+
+        function coordinatesMatch(first, second, epsilon = 1e-6) {
+            return first && second
+                && Number.isFinite(first.x) && Number.isFinite(first.y)
+                && Number.isFinite(second.x) && Number.isFinite(second.y)
+                && Math.abs(first.x - second.x) <= epsilon
+                && Math.abs(first.y - second.y) <= epsilon;
+        }
+
+        function findXmlPointIdByCoordinates(point) {
+            const xmlInput = document.getElementById('xmlInput').value.trim();
+            if (!xmlInput || !point) {
+                return null;
+            }
+
+            const xmlDoc = new DOMParser().parseFromString(xmlInput, "text/xml");
+            if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
+                return null;
+            }
+
+            const pointElements = Array.from(xmlDoc.getElementsByTagName(XML_POINT_TAG));
+            const matchingElement = pointElements.find(pointElement => {
+                const x = parseFloat(pointElement.getAttribute(XML_ATTR_X));
+                const y = parseFloat(pointElement.getAttribute(XML_ATTR_Y));
+                const metricXAttr = pointElement.getAttribute(XML_ATTR_METRIC_X);
+                const metricYAttr = pointElement.getAttribute(XML_ATTR_METRIC_Y);
+                const metricPosition = {
+                    x: metricXAttr === null ? x : parseFloat(metricXAttr),
+                    y: metricYAttr === null ? y : parseFloat(metricYAttr)
+                };
+
+                if (coordinatesMatch(point.metricPosition, metricPosition)) {
+                    return true;
+                }
+
+                const jitteredX = x + jitter(x, y);
+                const jitteredPosition = {
+                    x: jitteredX,
+                    y: y + jitter(y, jitteredX)
+                };
+                return coordinatesMatch(point.kendiYeri, jitteredPosition);
+            });
+
+            if (!matchingElement) {
+                return null;
+            }
+
+            const pointId = parseInt(matchingElement.getAttribute(XML_ATTR_POINT_ID));
+            return Number.isFinite(pointId) ? pointId : null;
+        }
+
+        function updateViewPositionXmlMatch() {
+            const pointIndex = Number(viewPos.value);
+            const point = Number.isInteger(pointIndex) ? world.totalNoktaList[pointIndex] : null;
+            let xmlPointId = point?.sourcePointId;
+
+            if (xmlPointId === null || xmlPointId === undefined || xmlPointId === "") {
+                xmlPointId = findXmlPointIdByCoordinates(point);
+            }
+
+            const hasXmlPointId = xmlPointId !== null
+                && xmlPointId !== undefined
+                && xmlPointId !== ""
+                && Number.isFinite(Number(xmlPointId));
+            const text = hasXmlPointId ? String(xmlPointId) : "—";
+            viewPosXmlMatch.textContent = `XML: ${text}`;
+            viewPosXmlMatch.title = hasXmlPointId
+                ? `Matching XML NoktaNo: ${text}`
+                : "No matching XML point";
+        }
+
+        function drawWorld() {
+            //ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Canvas’ı temizle
+
+            // Üçgenleri kontrol et ve sıfırla
+            const tmpArray = new Array(3);
+            world.totalUcgenList.forEach((cizilenUcgen, ucgenSay) => {
+
+                if (cizilenUcgen.boya) {
+                    tmpArray[0] = world.totalNoktaList[cizilenUcgen.kenarList[0].uc1NoktaNo].kendiYeri;
+                    tmpArray[1] = world.totalNoktaList[cizilenUcgen.kenarList[0].uc2NoktaNo].kendiYeri;
+                    tmpArray[2] = world.totalNoktaList[cizilenUcgen.kenarList[0].karsiNoktaNo].kendiYeri;
+
+                    sonCizilenUcgen = cizilenUcgen;
+
+                    zoomedPolygon(ctx, "rgba(245, 245, 245, .8)", tmpArray);
+
+                    /*if (cizilenUcgen.kenarList[0].kenarPolyNo > -1) {
+                        if (cizilenUcgen.kenarList[1].kenarPolyNo > -1) {
+                            if (cizilenUcgen.kenarList[2].kenarPolyNo > -1) {
+                                zoomedPolygon(ctx, "green", tmpArray);
+                            }
+                        }
+                    }*/
+                }
+                cizilenUcgen.boya = false;
+
+                for (kenarSay = 0; kenarSay <= 2; kenarSay++) {
+                    let kenar = cizilenUcgen.kenarList[kenarSay];
+                    /*let komsuKenar = null;
+                    if (kenar.komsuNo > -1) {
+                        let komsuUcgen = world.totalUcgenList[kenar.komsuNo];
+                        komsuKenar = komsuUcgen.kenarList[kenar.komsudaKacinciKenarNo];
+                    }
+
+                    if (kenar.draw == null) {
+                        kenar.draw = true;
+                        if (!!komsuKenar) komsuKenar.draw = false;
+                    }*/
+
+                    kenar.draw = true;
+
+                    if (kenar.draw == true) {
+
+                        if (kenar.disKenar == false) {
+                            zoomedLine(ctx,
+                                "rgba(0, 0, 255, .1)",
+                                world.totalNoktaList[cizilenUcgen.kenarList[kenarSay].uc1NoktaNo].kendiYeri,
+                                world.totalNoktaList[cizilenUcgen.kenarList[kenarSay].uc2NoktaNo].kendiYeri);
+
+                        }
+                        else if (kenar.polyKenar == false) {
+                            zoomedLine(ctx,
+                                "brown",
+                                world.totalNoktaList[cizilenUcgen.kenarList[kenarSay].uc1NoktaNo].kendiYeri,
+                                world.totalNoktaList[cizilenUcgen.kenarList[kenarSay].uc2NoktaNo].kendiYeri, .8);
+                        }
+                        else if (kenar.polyKenar == true) {
+                            zoomedLine(ctx,
+                                "black",
+                                world.totalNoktaList[cizilenUcgen.kenarList[kenarSay].uc1NoktaNo].kendiYeri,
+                                world.totalNoktaList[cizilenUcgen.kenarList[kenarSay].uc2NoktaNo].kendiYeri);
+                        } else {
+                            zoomedLine(ctx,
+                                "blue",
+                                world.totalNoktaList[cizilenUcgen.kenarList[kenarSay].uc1NoktaNo].kendiYeri,
+                                world.totalNoktaList[cizilenUcgen.kenarList[kenarSay].uc2NoktaNo].kendiYeri);
+                        }
+                    }
+                }
+
+
+            });
+
+            // PolySelectMode kontrolü (false varsayıldı)
+            const linePath = []; // LinePath için boş dizi
+            world.totalNoktaList.forEach((nokta, noktaSay) => {
+
+                nokta.aralikList.forEach((aralik, aralikSay) => {
+                    if (!aralik.disabled && aralik.boya) {
+                        const paintkarsiucgen = world.totalUcgenList[aralik.ucgenNo];
+                        const karsikenar = paintkarsiucgen.kenarList[aralik.ucgeniciKarsiKenarNo];
+                        const gidenP1 = world.totalNoktaList[nokta.aralikList[aralikSay].gidenUcNo].kendiYeri;
+                        const gelenP1 = world.totalNoktaList[nokta.aralikList[aralikSay].gelenUcNo].kendiYeri;
+
+                        // Çizgiler
+                        //zoomedLine(ctx, "green", gidenP1, world.totalNoktaList[karsikenar.karsiNoktaNo].kendiYeri); // GidenPen
+                        //zoomedLine(ctx, "blue", gelenP1, world.totalNoktaList[karsikenar.karsiNoktaNo].kendiYeri);  // GelenPen
+                        zoomedLine(ctx, "rgba(255, 0, 0, .1)", world.totalNoktaList[karsikenar.uc1NoktaNo].kendiYeri, world.totalNoktaList[karsikenar.uc2NoktaNo].kendiYeri); // karsiPen
+
+                        // KenarOrta ve OrtaP (örnek hesaplama)
+                        const kenarOrta = {
+                            x: (world.totalNoktaList[karsikenar.uc1NoktaNo].kendiYeri.x + world.totalNoktaList[karsikenar.uc2NoktaNo].kendiYeri.x) / 2,
+                            y: (world.totalNoktaList[karsikenar.uc1NoktaNo].kendiYeri.y + world.totalNoktaList[karsikenar.uc2NoktaNo].kendiYeri.y) / 2
+                        };
+                        const ortaP = kenarOrta; // Örnek olarak aynı alındı
+
+                        // Daire çizimleri
+                        /*ctx.beginPath();
+                        ctx.arc(kenarOrta.x, kenarOrta.y, 5, 0, 2 * Math.PI);
+                        ctx.fillStyle = "red";
+                        ctx.fill();
+                        ctx.closePath();
+ 
+                        ctx.beginPath();
+                        ctx.arc(ortaP.x, ortaP.y, 5, 0, 2 * Math.PI);
+                        ctx.strokeStyle = "red";
+                        ctx.stroke();
+                        ctx.closePath();*/
+
+                        // Komşu bağlantılar
+                        if (karsikenar.komsuNo > -1 && karsikenar.komsuNo < world.totalUcgenList.length) {
+                            const paintKomsuBag1 = world.totalNoktaList[world.totalUcgenList[karsikenar.komsuNo].kenarList[karsikenar.komsudaKacinciKenarNo].uc1NoktaNo].kendiYeri;
+                            const paintKomsuBag2 = world.totalNoktaList[world.totalUcgenList[karsikenar.komsuNo].kenarList[karsikenar.komsudaKacinciKenarNo].uc2NoktaNo].kendiYeri;
+                            //zoomedLine(ctx, "dimgray", paintKomsuBag1, ortaP);
+                            //zoomedLine(ctx, "darkorange", paintKomsuBag2, ortaP);
+                        }
+
+                        aralik.boya = false;
+                    }
+                });
+
+                if (noktaSay > 3) {
+                    linePath.push(nokta.kendiYeri);
+                }
+
+            });
+
+            //if (world.aramailkNoktasi?.connectibleNoktalar !== undefined && world.aramailkNoktasi.connectibleNoktalar != null) {
+            const { aramailkNoktasi, totalNoktaList } = world;
+            const showVisibles = document.getElementById("chkViewVisibles").checked;
+
+            if (showVisibles) {
+                drawRelatedRays(aramailkNoktasi, totalNoktaList, world.rays, ctx);
+            } else {
+                drawConnectiblePoints(aramailkNoktasi, totalNoktaList, ctx);
+            }
+
+            /*if (world.cemberList.length > 0) {
+                world.cemberList.forEach((cemberNoktaNo) => {
+                    const nokta = world.totalNoktaList[cemberNoktaNo];
+                    const x = nokta.kendiYeri.x;
+                    const y = nokta.kendiYeri.y;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = cemberNoktaNo === world.closingPointNo ? "red" : "black";
+                    ctx.fill();
+                    ctx.closePath();
+
+                });
+            }*/
+
+            // AramailkNoktasi ve TargetNokta çizimi
+            const aramailkX = world.aramailkNoktasi.kendiYeri.x;
+            const aramailkY = world.aramailkNoktasi.kendiYeri.y;
+            /*ctx.beginPath();
+            ctx.arc(aramailkX, aramailkY, 3, 0, 2 * Math.PI);
+            ctx.strokeStyle = "red";
+            ctx.stroke();
+            ctx.closePath();*/
+            if (isCursorOverCanvas) {
+                zoomedLine(ctx, "DarkSlateGray", world.aramailkNoktasi.kendiYeri, world.targetNokta.kendiYeri, 2);
+            }
+
+            drawPocketTreeOverlay(ctx, world.pocketTreeOverlay);
+
+            if (dbwcPreviewTour?.length > 1) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(dbwcPreviewTour[0].displayX, dbwcPreviewTour[0].displayY);
+                for (let i = 1; i < dbwcPreviewTour.length; i++) {
+                    ctx.lineTo(dbwcPreviewTour[i].displayX, dbwcPreviewTour[i].displayY);
+                }
+                ctx.closePath();
+                ctx.strokeStyle = "#0b63ce";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // LinePath temizleme
+            linePath.length = 0;
+        }
+
+        function pocketTreeToneColor(tone, maxTone) {
+            const span = Math.max(1, maxTone);
+            const t = Math.max(0, Math.min(1, tone / span));
+            // tone 0: lacivert (siyahtan ayrılır); gerçek dallanmada mavi → turkuaz
+            const hue = 222 - 72 * t;
+            const saturation = 78 - 18 * t;
+            const lightness = 28 + 42 * t;
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        }
+
+        function drawPocketTreeOverlay(ctx, overlay) {
+            if (!overlay?.segments?.length) return;
+            const maxTone = Math.max(0, overlay.maxTone || 0);
+            for (const segment of overlay.segments) {
+                const tone = Number.isFinite(segment.tone) ? segment.tone : Math.max(0, (segment.depth || 1) - 1);
+                zoomedLine(
+                    ctx,
+                    pocketTreeToneColor(tone, maxTone),
+                    { x: segment.x1, y: segment.y1 },
+                    { x: segment.x2, y: segment.y2 },
+                    1.8
+                );
+            }
+        }
+
+        function drawConnectiblePoints(aramailkNoktasi, totalNoktaList, ctx) {
+            aramailkNoktasi.connectibleNoktalar.forEach(noktaNo => {
+                const { x, y } = totalNoktaList[noktaNo].kendiYeri;
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = "green";
+                ctx.fill();
+                ctx.closePath();
+            });
+        }
+
+        function drawRelatedRays(aramailkNoktasi, totalNoktaList, rays, ctx) {
+            const originNo = aramailkNoktasi.noktaNo;
+            aramailkNoktasi.relatedRays.forEach(rayId => {
+                const ray = rays.get(rayId);
+                if (ray) {
+                    const isP1 = ray.p1No === originNo;
+                    const isP2 = ray.p2No === originNo;
+                    if (!isP1 && !isP2) return;
+
+                    let pointLoc;
+                    if (isP1) {
+                        pointLoc = Number.isInteger(ray.p2No) && ray.p2No >= 0
+                            ? totalNoktaList[ray.p2No].kendiYeri
+                            : ray.p2Loc;
+                    } else {
+                        if (!Number.isInteger(ray.p1No) || ray.p1No < 0) return;
+                        pointLoc = totalNoktaList[ray.p1No].kendiYeri;
+                    }
+
+                    const { x, y } = pointLoc;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = "blue";
+                    ctx.fill();
+                    ctx.closePath();
+                }
+            });
+        }
+
+        function zoomedLine(ctx, color, loc1, loc2, lineWidth = 0.5) {
+            // 1) State’i korumak için save/restore
+            ctx.save();
+
+            // 2) Piksellere hizala
+            const x1 = Math.round(loc1.x) + 0.5;
+            const y1 = Math.round(loc1.y) + 0.5;
+            const x2 = Math.round(loc2.x) + 0.5;
+            const y2 = Math.round(loc2.y) + 0.5;
+
+            // 3) Başlat
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+
+            // 4) Stil ayarları
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lineWidth;
+            ctx.lineCap = 'butt';    // keskin uçlar
+            ctx.lineJoin = 'miter';   // köşe birleşimi
+            ctx.imageSmoothingEnabled = false; // (opsiyonel)
+
+            // 5) Çiz
+            ctx.stroke();
+
+            // 6) Geri al
+            ctx.restore();
+        }
+
+        function zoomedPolygon(ctx, color, points) {
+            const copyArray = points.map(point => ({
+                x: point.x,
+                y: point.y
+            }));
+
+            ctx.beginPath();
+            ctx.moveTo(copyArray[0].x, copyArray[0].y);
+            for (let i = 1; i < copyArray.length; i++) {
+                ctx.lineTo(copyArray[i].x, copyArray[i].y);
+            }
+            ctx.closePath();
+
+            // More reliable check: ensure mouse is actually over canvas and we have valid target coordinates
+            if (world.targetNokta && world.targetNokta.kendiYeri &&
+                world.targetNokta.kendiYeri.x >= 0 && world.targetNokta.kendiYeri.x <= canvas.width &&
+                world.targetNokta.kendiYeri.y >= 0 && world.targetNokta.kendiYeri.y <= canvas.height) {
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+
+            /*if (world.selectedPolygonNo > -1) {
+                const polyMerkez = world.polygonList[world.selectedPolygonNo].polyMerkez;
+                ctx.beginPath();
+                ctx.arc(polyMerkez.X, polyMerkez.y, 5, 0, 2 * Math.PI);
+                ctx.strokeStyle = "black";
+                ctx.stroke();
+                ctx.closePath();
+            }*/
+        }
+
+        /**
+         * Belirtilen sınırlar içinde rastgele bir konum {x, y} objesi üretir.
+         */
+        function generateRandomLocation(canvasWidth, canvasHeight, padding) {
+            const x = padding + Math.floor(Math.random() * (canvasWidth - 2 * padding));
+            const y = padding + Math.floor(Math.random() * (canvasHeight - 2 * padding));
+            return { x, y };
+        }
+
+        function generatePoints() {
+            dbwcPreviewTour = null;
+            world = new World(); // Global world nesnesi sıfırlanıyor
+            xmlMetricBySourceId = null;
+
+            const isRandom = document.getElementById('randomPoints').checked;
+            const numPointsInput = parseInt(document.getElementById('pointCount').value);
+            const xmlInput = document.getElementById('xmlInput').value.trim();
+            const canvas = document.getElementById('canvas');
+
+            // İşlenecek tüm noktaları birleşik bir formatta tutacak dizi
+            let pointsToProcess = [];
+            let xmlSkipNotice = "";
+            const RANDOM_POINT_POLYGON_NO = 0; // Rastgele noktalar için sabit bir poligon ID'si
+
+            // --- Noktaları Toplama Aşaması ---
+
+            if (isRandom) {
+                let tempRandomPoints = []; // angularSort için geçici nokta listesi
+                let generationAttempts = 0;
+                const maxGenerationAttempts = numPointsInput * 1000;
+
+                while (tempRandomPoints.length < numPointsInput && generationAttempts < maxGenerationAttempts) {
+                    let x = 20 + Math.floor(Math.random() * (canvas.width - 40));
+                    let y = 20 + Math.floor(Math.random() * (canvas.height - 40));
+                    const metricX = x;
+                    const metricY = y;
+                    generationAttempts++;
+                    x += jitter(x, y);
+                    y += jitter(y, x);
+
+                    const tooCloseToSelf = tempRandomPoints.some(pt => mesafeHesapla({ x: pt[0], y: pt[1] }, { x: x, y: y }) < 2);
+
+                    if (!tooCloseToSelf) {
+                        tempRandomPoints.push([x, y, true, metricX, metricY]);
+                    }
+                }
+
+                if (tempRandomPoints.length < numPointsInput) {
+                    console.warn(`Could only generate ${tempRandomPoints.length} out of ${numPointsInput} random points.`);
+                }
+
+                if (tempRandomPoints.length > 0) {
+                    polygonMain = angularSort(tempRandomPoints); // angularSort çağrılıyor ve polygonMain güncelleniyor!
+
+                    polygonMain.forEach((point, index) => { // angularSort'tan dönen sıralı noktalar kullanılıyor
+                        pointsToProcess.push({
+                            loc: { x: point[0], y: point[1] },
+                            isXmlPoint: false,
+                            polyNo: RANDOM_POINT_POLYGON_NO,
+                            isJoinable: point[2], // angularSort'tan gelen 3. değeri (isJoinable) koru
+                            sourcePointId: `random-${index}`,
+                            metricPosition: { x: point[3], y: point[4] }
+                        });
+                    });
+                }
+            } else if (xmlInput) {
+                try {
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(xmlInput, "text/xml");
+                    const parseError = xmlDoc.getElementsByTagName("parsererror");
+                    if (parseError.length > 0) {
+                        throw new Error("XML parsing error: " + parseError[0].textContent);
+                    }
+
+                    const pointElements = xmlDoc.getElementsByTagName(XML_POINT_TAG);
+                    if (pointElements.length === 0) {
+                        alert("No valid XML format found or no points defined!");
+                        return;
+                    }
+                    // Başlık satırındaki "XML MetricX/Y" ölçümü için; bütün noktalarda yoksa gösterilmez.
+                    const xmlMetric = new Map();
+                    let xmlMetricComplete = true;
+                    // PolyNo yoksa 0. NoktaNo ya her noktada ya hiçbirinde olmalı; hiçbirinde yoksa
+                    // kabul edilen noktalara sırayla 1..n verilir. Kimlik DBWC'ye ve Copy Points'e gider.
+                    const idCount = Array.from(pointElements)
+                        .filter(element => element.getAttribute(XML_ATTR_POINT_ID) !== null).length;
+                    if (idCount > 0 && idCount < pointElements.length) {
+                        alert(`NoktaNo must be given on every point or on none (${idCount} of ${pointElements.length} points have it).`);
+                        return;
+                    }
+                    const autoPointIds = idCount === 0;
+                    const seenPointIds = new Set();
+                    let skippedPoints = 0;
+
+                    for (let i = 0; i < pointElements.length; i++) {
+                        const xAttr = pointElements[i].getAttribute(XML_ATTR_X);
+                        const yAttr = pointElements[i].getAttribute(XML_ATTR_Y);
+                        const polyNoAttr = pointElements[i].getAttribute(XML_ATTR_POLYNO);
+                        const pointIdAttr = pointElements[i].getAttribute(XML_ATTR_POINT_ID);
+
+                        const x = parseFloat(xAttr);
+                        const y = parseFloat(yAttr);
+                        const xmlPolyNo = polyNoAttr === null ? 0 : parseInt(polyNoAttr);
+                        const sourcePointId = autoPointIds ? pointsToProcess.length + 1 : parseInt(pointIdAttr);
+                        if (Number.isFinite(sourcePointId) && seenPointIds.has(sourcePointId)) {
+                            alert(`Duplicate NoktaNo ${sourcePointId}: every point needs a unique NoktaNo.`);
+                            return;
+                        }
+                        // MetricX/MetricY bilinçli olarak yok sayılıyor: tüm uzunluk
+                        // hesapları tuval çözünürlüğü üzerinden yapılır. XML'de varsa yalnız
+                        // başlık satırında ek ölçüm olarak gösterilir (xmlMetricBySourceId).
+                        const metricX = x;
+                        const metricY = y;
+                        const xmlMetricXAttr = pointElements[i].getAttribute(XML_ATTR_METRIC_X);
+                        const xmlMetricYAttr = pointElements[i].getAttribute(XML_ATTR_METRIC_Y);
+
+                        if ([x, y, xmlPolyNo, sourcePointId, metricX, metricY].every(Number.isFinite)) {
+                            seenPointIds.add(sourcePointId);
+                            let loc = { x: x, y: y };
+                            loc.x += jitter(loc.x, loc.y);
+                            loc.y += jitter(loc.y, loc.x);
+
+                            pointsToProcess.push({
+                                loc: loc,
+                                isXmlPoint: true,
+                                polyNo: xmlPolyNo,
+                                sourcePointId: sourcePointId,
+                                metricPosition: { x: metricX, y: metricY },
+                                isJoinable: true // XML noktaları için varsayılan joinable durumu
+                            });
+                            const xmlMetricXValue = xmlMetricXAttr === null ? NaN : parseFloat(xmlMetricXAttr);
+                            const xmlMetricYValue = xmlMetricYAttr === null ? NaN : parseFloat(xmlMetricYAttr);
+                            if (Number.isFinite(xmlMetricXValue) && Number.isFinite(xmlMetricYValue)
+                                && !xmlMetric.has(sourcePointId)) {
+                                xmlMetric.set(sourcePointId, { x: xmlMetricXValue, y: xmlMetricYValue,
+                                    sourceX: metricX, sourceY: metricY });
+                            } else {
+                                xmlMetricComplete = false;
+                            }
+                        } else {
+                            skippedPoints++;
+                            console.warn("Skipping invalid point data from XML:", pointElements[i].outerHTML);
+                        }
+                    }
+                    xmlMetricBySourceId = xmlMetricComplete && xmlMetric.size > 0
+                        && xmlMetric.size === pointsToProcess.length ? xmlMetric : null;
+                    if (skippedPoints > 0) {
+                        xmlSkipNotice = `${skippedPoints} of ${pointElements.length} <P> elements skipped: `
+                            + "X and Y must be numbers (PolyNo and NoktaNo, if given, must be integers).";
+                    }
+                } catch (e) {
+                    console.error("Error occurred while processing XML:", e);
+                    alert("Error occurred while processing XML: " + e.message);
+                    return;
+                }
+            } else {
+                alert("Choose random generation or enter XML!");
+                return;
+            }
+
+            // --- Toplanan Noktaları İşleme Aşaması ---
+            if (pointsToProcess.length > 0) {
+                world = buildWorldFromCollectedPoints(pointsToProcess);
+            } else {
+                console.log("No points were collected to process.");
+            }
+
+            viewPos.setAttribute("max", Math.max(0, world.totalNoktaList.length - 1));
+            updateViewPositionXmlMatch();
+            updateReportWithCanvasLength(xmlSkipNotice);
+
+            requestAnimationFrame(drawWorld);
+        }
+
+        // Raw Route'ta yüklenen XML'in MetricX/MetricY değerleri: NoktaNo -> { x, y, sourceX, sourceY }.
+        // Akışlar bu değerleri kullanmaz (Raw Route bilinçli olarak X/Y ile çalışır); yalnız başlık satırında
+        // ek ölçüm olarak gösterilir. sourceX/sourceY, yükleme anındaki metrik konumdur (XML X/Y): nokta hâlâ
+        // aynı metrik konumdaysa ölçüme girer, değilse (başka nokta kümesi) XML ölçümü gösterilmez.
+        let xmlMetricBySourceId = null;
+
+        function xmlMetricPosition(point) {
+            const entry = xmlMetricBySourceId?.get(point.sourcePointId);
+            const metric = point.metricPosition;
+            if (!entry || !metric) return null;
+            return Math.abs(entry.sourceX - metric.x) <= 1e-6 && Math.abs(entry.sourceY - metric.y) <= 1e-6
+                ? entry : null;
+        }
+
+        // Bir çevrimin üç ham Öklid uzunluğu: ekran (kendiYeri; tuvalde çizilen, jitter'lı), metrik
+        // (metricPosition; akışların ve DBWC raporundaki "raw" satırının ölçtüğü) ve varsa XML MetricX/MetricY.
+        // Bir ölçü için herhangi bir noktada koordinat yoksa o ölçü null olur.
+        function cycleLengthMeasures(cyclePoints) {
+            const positions = {
+                canvas: point => point.kendiYeri,
+                metric: point => point.metricPosition,
+                xml: xmlMetricPosition
+            };
+            const result = {};
+            for (const [name, position] of Object.entries(positions)) {
+                let length = 0;
+                for (let at = 0; at < cyclePoints.length && length !== null; at++) {
+                    const a = position(cyclePoints[at]);
+                    const b = position(cyclePoints[(at + 1) % cyclePoints.length]);
+                    length = a && b && [a.x, a.y, b.x, b.y].every(Number.isFinite)
+                        ? length + Math.hypot(a.x - b.x, a.y - b.y)
+                        : null;
+                }
+                result[name] = length;
+            }
+            return result;
+        }
+
+        /**
+         * Rota çevrimlerini bag1/bag2 komşuluğundan yürüyerek ölçer (cycleLengthMeasures). K-opt/köprü sonrası
+         * polyNoktaList sırası bayatlayabildiği için bag komşuluğu esas alınır.
+         */
+        function canvasCycleLengthsFromBags() {
+            const points = world.totalNoktaList;
+            const visited = new Set();
+            const cycles = [];
+            for (let startId = 4; startId < points.length; startId++) {
+                const startPoint = points[startId];
+                if (!startPoint || startPoint.noktaSilindi || startPoint.turemis || visited.has(startId)) continue;
+                if (!Number.isInteger(startPoint.bag1) || !Number.isInteger(startPoint.bag2)) continue;
+
+                const cyclePoints = [];
+                let previousId = null;
+                let currentId = startId;
+                let closed = false;
+                for (let guard = 0; guard <= points.length; guard++) {
+                    const current = points[currentId];
+                    if (!current?.kendiYeri || !Number.isInteger(current.bag1) || !Number.isInteger(current.bag2)) break;
+                    visited.add(currentId);
+                    cyclePoints.push(current);
+                    const nextId = previousId === null || current.bag1 === previousId
+                        ? current.bag2
+                        : current.bag1;
+                    const next = points[nextId];
+                    if (!next?.kendiYeri) break;
+                    previousId = currentId;
+                    currentId = nextId;
+                    if (currentId === startId) { closed = true; break; }
+                }
+                if (closed) cycles.push(cycleLengthMeasures(cyclePoints));
+            }
+            return cycles;
+        }
+
+        // Bag komşuluğu kurulmamışsa (ör. kapanmamış poligon) polyNoktaList sırası kullanılır.
+        function canvasCycleLengthsFromPolygons() {
+            const cycles = [];
+            for (const polygon of world.polygonList) {
+                const indices = polygon?.polyNoktaList;
+                if (!Array.isArray(indices) || indices.length < 2) continue;
+                const cyclePoints = indices
+                    .map(index => world.totalNoktaList[index])
+                    .filter(point => point?.kendiYeri && !point.noktaSilindi);
+                if (cyclePoints.length < 2) continue;
+                cycles.push(cycleLengthMeasures(cyclePoints));
+            }
+            return cycles;
+        }
+
+        // "Canvas raw length: <ekran> (ekran) | metrik: <metrik> | XML MetricX/Y: <xml>"; metrik ve XML
+        // ölçüleri yalnız bütün noktalarda tanımlıysa yazılır.
+        function canvasLengthHeaderLine() {
+            let cycles, tag = "";
+            if (dbwcPreviewTour?.length > 1) {
+                cycles = [cycleLengthMeasures(dbwcPreviewTour.map(point => ({
+                    kendiYeri: { x: point.displayX, y: point.displayY },
+                    metricPosition: { x: point.x, y: point.y },
+                    sourcePointId: point.sourcePointId
+                })))];
+                tag = " (DBWC light preview)";
+            } else {
+                cycles = canvasCycleLengthsFromBags();
+                if (cycles.length === 0) cycles = canvasCycleLengthsFromPolygons();
+            }
+            const total = key => cycles.some(cycle => cycle[key] === null) ? null
+                : cycles.reduce((sum, cycle) => sum + cycle[key], 0);
+            const canvas = total("canvas");
+            if (cycles.length === 0 || canvas === null) return "Canvas raw length: n/a";
+            const metric = total("metric"), xml = total("xml");
+            let line = `Canvas raw length: ${canvas.toFixed(6)} (screen)`;
+            if (cycles.length > 1) line += ` (${cycles.map(cycle => cycle.canvas.toFixed(3)).join(" + ")})`;
+            if (metric !== null) line += ` | metric: ${metric.toFixed(6)}`;
+            if (xml !== null) line += ` | XML MetricX/Y: ${xml.toFixed(6)}`;
+            return line + tag;
+        }
+
+        // Sonuç panelini, en üstte ekran/metrik (ve varsa XML metrik) ham Öklid uzunlukları olacak şekilde yazar.
+        function updateReportWithCanvasLength(baseText = "") {
+            const reportElement = document.getElementById("doubleBridgeReport");
+            const header = canvasLengthHeaderLine();
+            reportElement.textContent = baseText ? `${header}\n${baseText}` : header;
+        }
+
+        // Tur hamleleri en az 4 nokta ister; daha azında modüller anlamsız bir hata verir. 3 noktada
+        // tek tur var (üçgen), iyileştirilecek bir şey yok. Boş world'e dokunmaz (DBWC o zaman XML'den okur).
+        function stopIfTourTooSmall(pointCount) {
+            if (!(pointCount > 0 && pointCount < 4)) return false;
+            document.getElementById("doubleBridgeReport").style.color = "";
+            updateReportWithCanvasLength(pointCount === 3
+                ? "Only 3 points: the tour is already optimal, nothing to improve."
+                : "No tour to improve yet: load or generate at least 4 points and click Raw Route.");
+            return true;
+        }
+
+        /**
+         * Tuvaldeki noktalardan convex layers hesaplar ve her katmanı ayrı bir
+         * kapalı poligon (PolyNo = katman indeksi) olarak yeniden çizer.
+         */
+        function runConvexLayers() {
+            const result = rebuildWorldAsConvexLayers(world);
+            if (!result) {
+                alert("Convex layers requires at least 3 drawn points!");
+                return;
+            }
+
+            world = result.world;
+
+            viewPos.setAttribute("max", Math.max(0, world.totalNoktaList.length - 1));
+            updateViewPositionXmlMatch();
+            updateReportWithCanvasLength(
+                `Convex layers: ${result.layers.length} layers `
+                + `(sizes ${result.layers.map(layer => layer.length).join(", ")})`);
+
+            requestAnimationFrame(drawWorld);
+        }
+
+        /**
+         * Katmanlanmış poligonları dıştan içe tek köprülerle tek tura birleştirir
+         * ve sonucu PolyNo 0 olan tek poligon olarak yeniden çizer.
+         */
+        function runMergeLayers() {
+            const result = mergeWorldLayers(world);
+            if (!result) {
+                alert("Merge layers requires at least 2 drawn polygons!");
+                return;
+            }
+
+            world = result.world;
+
+            viewPos.setAttribute("max", Math.max(0, world.totalNoktaList.length - 1));
+            updateViewPositionXmlMatch();
+
+            const lines = [
+                `Merge layers: ${result.merges.length} merges, total delta ${result.totalDelta.toFixed(3)}`,
+                `Merged tour raw length: ${result.tourLength.toFixed(3)}`,
+                `Merged tour TSPLIB EUC_2D length: ${result.tourTsplibLength}`
+            ];
+            result.merges.forEach((merge, index) => {
+                if (merge.type === "bridge") {
+                    lines.push(
+                        `Merge ${index + 1}: bridge to layer ${merge.layer}, `
+                        + `removed ${merge.removedOuterIds.join("-")} & ${merge.removedInnerIds.join("-")}, `
+                        + `added ${merge.addedIds.map(edge => edge.join("-")).join(", ")}, `
+                        + `delta ${merge.delta.toFixed(3)}`
+                    );
+                } else {
+                    lines.push(
+                        `Merge ${index + 1}: insertion of point ${merge.pointId} `
+                        + `(layer ${merge.layer}), delta ${merge.delta.toFixed(3)}`
+                    );
+                }
+            });
+            updateReportWithCanvasLength(lines.join("\n"));
+
+            requestAnimationFrame(drawWorld);
+        }
+
+        function formatExactTspReport(result, elapsedMs) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const solution = result.solution;
+            let headline = "Exact TSP: proven optimal tour.";
+            if (!solution.optimal) {
+                headline = Number.isFinite(solution.gap)
+                    ? `Exact TSP: ${solution.stopReason} exhausted, tour is provably within `
+                        + `${(solution.gap * 100).toFixed(3)}% of the optimum.`
+                    : `Exact TSP: ${solution.stopReason} exhausted before any bound was proven; `
+                        + "best tour found is not certified.";
+            }
+            if (!result.improved) {
+                headline = solution.optimal
+                    ? "Exact TSP: the drawn tour already matches the proven optimum; canvas unchanged."
+                    : `${headline} It did not beat the drawn tour, so the canvas is unchanged.`;
+            }
+            // Tohum çizili turdur; heuristikten kısaysa arama ondan başlamıştır.
+            const startedFromDrawnTour = Number.isFinite(solution.seedLength)
+                && Number.isFinite(solution.heuristicLength)
+                && solution.seedLength < solution.heuristicLength;
+            const lines = [
+                headline,
+                `Points: ${result.pointCount}, method: ${solution.method}, `
+                + `search took ${(elapsedMs / 1000).toFixed(2)} s`,
+                solution.method === "held-karp-1tree-branch-and-bound"
+                    ? `Raw Euclidean: ${startedFromDrawnTour ? "drawn tour" : "heuristic"} start `
+                        + `${raw(solution.initialLength)} -> search best ${raw(result.tourLength)}`
+                    : `Raw Euclidean: ${raw(result.tourLength)}`,
+                `TSPLIB EUC_2D length: ${result.tourTsplibLength}`
+            ];
+            if (Number.isFinite(result.sourceTourLength)) {
+                lines.push(result.improved
+                    ? `Drawn tour raw: ${raw(result.sourceTourLength)}, `
+                        + `shortened by ${raw(result.sourceTourLength - result.tourLength)}`
+                    : `Drawn tour raw: ${raw(result.sourceTourLength)}, kept as is`);
+            }
+            if (solution.method === "held-karp-1tree-branch-and-bound") {
+                lines.push(
+                    `Lower bound: ${solution.lowerBound === null ? "none proven" : raw(solution.lowerBound)} `
+                    + `(root 1-tree bound ${raw(solution.rootBound)})`,
+                    `Search: ${solution.stats.nodesExplored} branch nodes, `
+                    + `${solution.stats.boundCalls} 1-tree bounds, `
+                    + `${solution.stats.nodesPruned} pruned, `
+                    + `${solution.stats.incumbentUpdates} incumbent updates`
+                    + (solution.openNodes ? `, ${solution.openNodes} nodes left open` : "")
+                );
+                if (solution.cuts && solution.cuts.generated > 0) {
+                    lines.push(
+                        `Blossom cuts: ${solution.cuts.generated} generated in ${solution.cuts.rounds} rounds; `
+                        + `root bound ${raw(solution.cuts.rootBoundWithoutCuts)} without cuts -> `
+                        + `${raw(solution.cuts.rootBoundWithCuts)} with cuts`
+                    );
+                }
+            }
+            if (result.improved) lines.push(`Tour: ${result.tourPointIds.join(" -> ")}`);
+            return lines.join("\n");
+        }
+
+        /**
+         * Çizili noktalar için kanıtlı optimum turu bulur ve rotayı o turla
+         * yeniden çizer. Yöntem: Held-Karp 1-ağaç Lagrange alt sınırı ile
+         * dallandır-sınırla; 30-40 nokta milisaniyeler sürer, büyük girdide
+         * çözücü bütçede dönerse kanıtlı/kanıtsız sonucu raporlanır; sert UI
+         * sınırı Worker'ı sonlandırdığında canlı tur korunur.
+         * Karar metriği rotanın geri kalanıyla aynı: metricPosition üzerinden
+         * ham Öklid. Arama Worker'da, sonuç doğrulama ve world aktarımı ana
+         * iş parçacığında yürür.
+         */
+        // pr76 gibi zor örnekler için kullanıcı tarafından belirlenen üst sınır.
+        // Süre dolduğunda Worker durdurulur; kanıt yoksa mevcut tur korunur.
+        const EXACT_TSP_TIME_LIMIT_MS = 300000;
+        let activeExactRun = null;
+
+        function exactInputSignature(points, seedTour) {
+            return JSON.stringify({
+                points: points.map(point => [point.noktaIndex, point.sourcePointId,
+                    point.x, point.y, point.metricPosition.x, point.metricPosition.y]),
+                seedTour
+            });
+        }
+
+        function finishExactRun(run) {
+            if (activeExactRun !== run) return;
+            clearTimeout(run.watchdog);
+            run.worker.terminate();
+            activeExactRun = null;
+            document.getElementById("btnExactCancel").disabled = true;
+        }
+
+        function cancelExactTsp() {
+            if (!activeExactRun) return;
+            finishExactRun(activeExactRun);
+            updateReportWithCanvasLength("Exact TSP stopped by the user; live tour unchanged.");
+        }
+
+        function runExactTsp() {
+            if (activeExactRun) return;
+            const reportElement = document.getElementById("doubleBridgeReport");
+            try {
+                if (typeof Worker !== "function") throw new Error("This browser does not support Web Workers");
+                if (location.protocol === "file:") throw new Error("Exact TSP Worker requires a local HTTP server");
+                if (activeDbwcRun || dbwcPreviewTour) throw new Error("Finish the DBWC run or preview before Exact TSP");
+                const points = collectRoutePoints(world);
+                if (points.length < 3) throw new Error("Exact TSP requires at least 3 drawn points");
+                const seedTour = routeTourSeed(world, points);
+                const worker = new Worker("js/exactTspWorker.js");
+                const run = {
+                    worker, sourceWorld: world, signature: exactInputSignature(points, seedTour),
+                    startedAt: performance.now(), watchdog: null
+                };
+                activeExactRun = run;
+                document.getElementById("btnExactCancel").disabled = false;
+                reportElement.style.color = "";
+                updateReportWithCanvasLength(`Exact TSP Worker running; search limit ${EXACT_TSP_TIME_LIMIT_MS / 1000} s.`);
+                worker.onmessage = event => {
+                    if (activeExactRun !== run) return;
+                    const message = event.data || {};
+                    if (message.type === "error") {
+                        finishExactRun(run);
+                        reportElement.style.color = "#b00020";
+                        updateReportWithCanvasLength(`Exact TSP failed: ${message.message}`);
+                        console.error(message.stack || message.message);
+                        return;
+                    }
+                    if (message.type !== "result") return;
+                    try {
+                        const currentPoints = collectRoutePoints(world);
+                        if (world !== run.sourceWorld || exactInputSignature(currentPoints, routeTourSeed(world, currentPoints)) !== run.signature) {
+                            throw new Error("Exact TSP result is stale: the live tour or points changed");
+                        }
+                        const result = rebuildWorldAsExactTour(world, { precomputedSolution: message.solution });
+                        const elapsedMs = performance.now() - run.startedAt;
+                        finishExactRun(run);
+                        if (result.improved) {
+                            result.world.objectOccMode = "shared";
+                            objectOcc(result.world);
+                            world = result.world;
+                            viewPos.setAttribute("max", Math.max(0, world.totalNoktaList.length - 1));
+                            updateViewPositionXmlMatch();
+                        }
+                        updateReportWithCanvasLength(formatExactTspReport(result, elapsedMs));
+                        requestAnimationFrame(drawWorld);
+                    } catch (error) {
+                        finishExactRun(run);
+                        reportElement.style.color = "#b00020";
+                        updateReportWithCanvasLength(`Exact TSP result not applied: ${error.message}`);
+                        console.error(error);
+                    }
+                };
+                worker.onerror = event => {
+                    if (activeExactRun !== run) return;
+                    finishExactRun(run);
+                    reportElement.style.color = "#b00020";
+                    updateReportWithCanvasLength(`Exact TSP Worker error: ${event.message}`);
+                };
+                run.watchdog = setTimeout(() => {
+                    if (activeExactRun !== run) return;
+                    finishExactRun(run);
+                    updateReportWithCanvasLength("Exact TSP stopped at the 300 s search limit; no proof, live tour unchanged.");
+                }, EXACT_TSP_TIME_LIMIT_MS);
+                worker.postMessage({ type: "run", points: points.map(point => point.metricPosition),
+                    seedTour, timeLimitMs: EXACT_TSP_TIME_LIMIT_MS });
+            } catch (error) {
+                if (activeExactRun) finishExactRun(activeExactRun);
+                reportElement.style.color = "#b00020";
+                updateReportWithCanvasLength(`Exact TSP could not start: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        function formatBranchedDoubleBridgeReport(report) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const lines = [
+                report.committed ? "Branched double bridge committed." : "No shortening branched double bridge found.",
+                `Raw Euclidean: ${raw(report.initialLength)} -> ${raw(report.finalLength)}`,
+                `Raw improvement: ${raw(report.improvement)}`,
+                `TSPLIB EUC_2D: ${report.initialTsplibLength} -> ${report.finalTsplibLength} (improvement ${report.tsplibImprovement})`
+            ];
+            if (report.committed) {
+                lines.push(`First bridge cuts: ${report.firstBridge.cuts.join(", ")}`);
+                lines.push(`Second bridge cuts: ${report.secondBridge.cuts.join(", ")}`);
+                lines.push(`First regions: ${report.firstBridge.regionA} <-> ${report.firstBridge.regionB}`);
+                lines.push(`Second bridge pocket: tree ${report.secondBridge.pocketTreeId}, ${report.secondBridge.walkRegionId} -> ${report.secondBridge.targetRegionId}`);
+                lines.push(`Walk: k1 ${report.secondBridge.k1PointId} -> y1 ${report.secondBridge.y1PointId}, side ${report.secondBridge.walkSide}, direction ${report.secondBridge.direction}`);
+                lines.push(`Detached segment edges: ${report.secondBridge.detachedSegmentEdgeIndices.join(", ")}`);
+                lines.push(`Removed: ${report.removedEdges.map(edge => edge.join("-")).join(", ")}`);
+                lines.push(`Added: ${report.addedEdges.map(edge => edge.join("-")).join(", ")}`);
+            }
+            lines.push(`Transactions attempted: ${report.stats.transactionAttempts}`);
+            lines.push(`Transactions rejected: ${report.rejectedTransactionCount}`);
+            lines.push(`Scan: first edges ${report.stats.firstBridgeEdgesVisited}, walk edges ${report.stats.secondWalkEdgesVisited}, targets ${report.stats.secondTargetEdgesVisited}`);
+            const objectOccLabel = report.visibilityReusedFromKopt
+                ? "0.00 (K-opt snapshot reused)"
+                : report.timings.objectOccMs.toFixed(2);
+            lines.push(`Timing ms: ObjectOcc ${objectOccLabel}, context ${report.timings.roundContextMs.toFixed(2)}, search ${report.timings.searchMs.toFixed(2)}`);
+            if (Number.isFinite(report.timings.transactionMs)) {
+                lines.push(`Transaction ms: ${report.timings.transactionMs.toFixed(2)}`);
+            }
+            return lines.join("\n");
+        }
+
+        function runBranchedDoubleBridgeOptimization() {
+            if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
+            const reportElement = document.getElementById("doubleBridgeReport");
+            try {
+                const report = optimizeBranchedDoubleBridge(world, { log: true });
+                updateReportWithCanvasLength(formatBranchedDoubleBridgeReport(report));
+                requestAnimationFrame(drawWorld);
+            } catch (error) {
+                console.error(error);
+                reportElement.textContent = `Branched double bridge failed: ${error.message}`;
+            }
+        }
+
+        function formatGeometricRepairReport(report, elapsedMs) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const headline = {
+                COMMITTED: "Geometric repair committed.",
+                NO_IMPROVEMENT: "No shortening geometric repair found.",
+                BUDGET_EXHAUSTED: `Geometric repair stopped at its work budget (${report.complexity?.budgetStage}).`,
+                VISIBILITY_NOT_PREPARED: "Geometric repair requires the prepared visibility left by KBDB.",
+                TRANSACTION_REJECTED: `Geometric repair rejected by the route transaction: ${report.error}`
+            }[report.reason] || report.reason;
+            const lines = [headline, `Search took ${(elapsedMs / 1000).toFixed(2)} s`];
+            if (Number.isFinite(report.initialLength)) {
+                lines.push(
+                    `Raw Euclidean: ${raw(report.initialLength)} -> ${raw(report.finalLength)}`,
+                    `Raw improvement: ${raw(report.initialLength - report.finalLength)}`
+                );
+            }
+            if (report.move) {
+                lines.push(
+                    `Move: ${report.move.exchangeDepth}-edge ${report.move.lineage.kind}; delta ${raw(report.move.deltaRaw)}`,
+                    `Removed: ${report.move.removedEdgeKeys.join(", ")}`,
+                    `Added: ${report.move.addedEdgeKeys.join(", ")}`
+                );
+            }
+            if (report.counters) {
+                lines.push(
+                    `Candidate graph: ${report.counters.candidateEdgeCount} edges, maximum degree ${report.counters.maximumDegree}`,
+                    `Half states: ${report.counters.uniqueHalfStateCount}; join probes: `
+                    + `${report.counters.joinProbeCount} / ${report.counters.joinProbeLimit}`,
+                    `Final validation: ${report.counters.validationCount} candidates, `
+                    + `${report.counters.visibilityQueryCount} visibility queries, `
+                    + `${report.counters.intersectionTestCount} intersection tests`,
+                    `Global work: ${report.counters.totalWorkCount} / ${report.counters.totalWorkLimit}; `
+                    + `transactions: ${report.counters.transactionAttemptCount}`
+                );
+            }
+            return lines.join("\n");
+        }
+
+        function runGeometricRepair() {
+            if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
+            const reportElement = document.getElementById("doubleBridgeReport");
+            const button = document.getElementById("btn-geometricRepair");
+            button.disabled = true;
+            reportElement.textContent = "Geometric repair running...";
+            setTimeout(() => {
+                const startedAt = performance.now();
+                try {
+                    const report = optimizeGeometricRepair(world);
+                    updateReportWithCanvasLength(formatGeometricRepairReport(
+                        report, performance.now() - startedAt));
+                    requestAnimationFrame(drawWorld);
+                } catch (error) {
+                    console.error(error);
+                    reportElement.textContent = `Geometric repair failed: ${error.message}`;
+                } finally {
+                    button.disabled = false;
+                }
+            }, 0);
+        }
+
+        function formatIterativeRandomVisibilityRepairReport(report) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const lines = [report.fullStallProven
+                ? "FULL_STALL: Iterative Random Visibility Repair exhausted its search space."
+                : `STOPPED: ${report.reason}`];
+            if (!report.fullStallProven) lines.push(report.incompleteMessage || "Full stall not proven.");
+            if (report.error) lines.push(`Error: ${report.error}`);
+            lines.push(
+                `Raw Euclidean: ${raw(report.initialLength)} -> ${raw(report.finalLength)}`,
+                `Accumulated raw gain: ${raw(report.totalRawGain)}`,
+                `Accepted exchanges: ${report.acceptedExchangeCount}`,
+                `ObjectOcc rebuild: ${report.objectOccRebuildCount} (stall: ${report.stallObjectOccRebuildCount})`,
+                `Full sweeps: ${report.fullSweepCount}`,
+                `Candidate probe: ${report.candidateProbeCount} / ${report.limits.maxCandidateProbes}`,
+                `Invalidated ray: ${report.invalidatedRayCount}`,
+                `runSeed: ${report.runSeed}`,
+                `Time: ${report.elapsedMs.toFixed(2)} / ${report.limits.maxElapsedMs} ms`,
+                `Exchange budget: ${report.acceptedExchangeCount} / ${report.limits.maxAcceptedExchanges}`,
+                `Stop reason: ${report.reason}`
+            );
+            return lines.join("\n");
+        }
+
+        function runIterativeRandomVisibilityRepair() {
+            const reportElement = document.getElementById("doubleBridgeReport");
+            const button = document.getElementById("btn-iterativeRandomVisibilityRepair");
+            button.disabled = true;
+            reportElement.style.color = "";
+            reportElement.textContent = "Iterative Random Visibility Repair running...";
+            setTimeout(async () => {
+                try {
+                    const report = await optimizeIterativeRandomVisibilityRepair(world);
+                    reportElement.style.color = report.fullStallProven ? "" : "#b00020";
+                    updateReportWithCanvasLength(formatIterativeRandomVisibilityRepairReport(report));
+                    requestAnimationFrame(drawWorld);
+                } catch (error) {
+                    console.error(error);
+                    reportElement.style.color = "#b00020";
+                    reportElement.textContent = `STOPPED: ${error.message}\nFull stall not proven.`;
+                } finally {
+                    button.disabled = false;
+                }
+            }, 0);
+        }
+
+        function formatKbdbAndGeometricRepairReport(report) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const headline = {
+                GEOMETRIC_REPAIR_NO_IMPROVEMENT:
+                    "KBDB + Geometric Repair stopped when the repair found no improvement.",
+                GEOMETRIC_REPAIR_INCOMPLETE:
+                    `Macro pipeline did not complete (${report.geometricRepairReason}).`
+            }[report.status] || report.status;
+            const lines = [
+                headline,
+                `Raw Euclidean: ${raw(report.initialLength)} -> ${raw(report.finalLength)}`,
+                `Accumulated KBDB gain: ${raw(report.kbdbImprovement)}`,
+                `Accumulated Geometric Repair gain: ${raw(report.geometricRepairImprovement)}`,
+                `Total gain: ${raw(report.totalImprovement)}`,
+                `Macro rounds: ${report.macroRoundCount}; restarts: ${report.macroRestartCount}`,
+                `Call contract: KBDB ${report.contract.kbdbCalls}, Geometric Repair ${report.contract.geometricRepairCalls}, `
+                    + `repairs per round ${report.contract.geometricRepairCallsPerMacroRound}, direct ObjectOcc ${report.contract.directObjectOccCalls}`,
+                `Time: ${(report.elapsedMs / 1000).toFixed(2)} s`,
+                `Geometric Repair stop reason: ${report.geometricRepairReason}`
+            ];
+            report.rounds.forEach(round => {
+                lines.push(
+                    `Round ${round.roundIndex}: KBDB ${raw(round.initialLength)} -> ${raw(round.afterKbdbLength)}; `
+                    + `Geometric Repair ${raw(round.afterKbdbLength)} -> ${raw(round.finalLength)} (${round.geometricRepair.reason})`
+                );
+            });
+            if (!report.completed) {
+                lines.push("Macro step did not complete; Geometric Repair stall not proven.");
+            }
+            return lines.join("\n");
+        }
+
+        function runKbdbAndGeometricRepair() {
+            if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
+            const reportElement = document.getElementById("doubleBridgeReport");
+            const button = document.getElementById("btn-kbdbGeometricRepair");
+            button.disabled = true;
+            reportElement.style.color = "";
+            reportElement.textContent = "KBDB + Geometric Repair running...";
+            setTimeout(() => {
+                try {
+                    world.pocketTreeOverlay = null;
+                    world.objectOccMode = "shared";
+                    const report = optimizeKbdbAndGeometricRepair(world, {
+                        kbdbOptions: { bridgeOptions: { log: true } }
+                    });
+                    reportElement.style.color = report.completed ? "" : "#b00020";
+                    updateReportWithCanvasLength(formatKbdbAndGeometricRepairReport(report));
+                    requestAnimationFrame(drawWorld);
+                } catch (error) {
+                    console.error(error);
+                    reportElement.style.color = "#b00020";
+                    reportElement.textContent = `KBDB + Geometric Repair failed: ${error.message}`;
+                } finally {
+                    button.disabled = false;
+                }
+            }, 0);
+        }
+
+        function formatKbdbGrFourOptReport(report) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            // Bir bütçenin dolmasi YEREL OPTIMUM DEGILDIR; ayri yazilir.
+            const headline = {
+                FOUR_OPT_NO_IMPROVEMENT: "KBDB + GR + 4opt stopped when 4-opt found no improvement.",
+                BASELINE_INCOMPLETE: "Baseline pipeline (KBDB + GR) did not complete.",
+                ROUND_LIMIT_REACHED: "Macro round limit reached; 4-opt stall not proven.",
+                FOUR_OPT_PROBE_BUDGET_EXHAUSTED:
+                    "4-opt probe budget exhausted; search not finished, the tour may still be improvable.",
+                FOUR_OPT_VALIDATION_BUDGET_EXHAUSTED:
+                    "4-opt validation budget exhausted; search not finished, the tour may still be improvable.",
+                FOUR_OPT_TRANSACTION_REJECTED:
+                    "4-opt found a move but it could not be applied to the mesh; tour unchanged."
+            }[report.status] || report.status;
+            const lines = [
+                headline,
+                `Raw Euclidean: ${raw(report.initialLength)} -> ${raw(report.finalLength)}`,
+                `KBDB + Geometric Repair gain: ${raw(report.kbdbGeometricRepairImprovement)}`,
+                `4-opt gain: ${raw(report.fourOptImprovement)}`,
+                `Total gain: ${raw(report.totalImprovement)}`,
+                `Macro rounds: ${report.macroRoundCount}; 4-opt commits: ${report.fourOptCommitCount}`
+                + (report.extensionEnabled ? `; extension commits: ${JSON.stringify(report.extensionCommits)}` : "")
+                + (report.baselineRecoveries ? `; 4-opt after GR rejection: ${report.baselineRecoveries}` : ""),
+                `Candidate neighbors K=${report.policy.candidateNeighbors} (${report.policy.candidateSource}), `
+                + `depth <=${report.policy.maxDepth}, breadth ${report.policy.chainBreadth.join("/")}`,
+                `Early pruning: edge repeat ${report.policy.edgeRepeatPruning ? "on" : "off"}, `
+                + `subtour precheck ${report.policy.subtourPrecheck ? "on" : "off"}`,
+                `Time: ${(report.elapsedMs / 1000).toFixed(2)} s`
+            ];
+            report.rounds.forEach(round => {
+                if (!round.fourOpt) {
+                    lines.push(`Round ${round.roundIndex}: baseline pipeline did not complete (${round.baseline.status})`);
+                    return;
+                }
+                const move = round.fourOpt.move;
+                const counters = round.fourOpt.counters || {};
+                // scanPasses=1: kisitli tarama (don't-look bits) yetti; 2: tam tarama gerekti.
+                const scan = counters.scanPasses === 1 ? "restricted" : "full";
+                // Sonda = zincir adayi denemesi; dogrulama = O(n) tur kurulumu.
+                // Ikisinin arasindaki fark alt tur on kontrolunun elediği istir.
+                lines.push(
+                    `Round ${round.roundIndex}: KBDB+GR -> ${raw(round.afterBaselineLength)}; `
+                    + `4-opt -> ${raw(round.finalLength)} (${round.fourOpt.reason}`
+                    + (move ? `, k=${move.exchangeDepth}` : "")
+                    + (move && move.stage && move.stage !== "base" ? `, extension=${move.stage}` : "")
+                    + `, ${scan} scan, ${counters.chainProbes ?? 0} probes`
+                    + `, ${counters.subtourPrechecks ?? 0} prechecks`
+                    + `, ${counters.validationCount ?? 0} validations`
+                    + (counters.repeatPrunes ? `, ${counters.repeatPrunes} repeats pruned` : "")
+                    + (counters.probeBudgetSpent ? ", PROBE BUDGET EXHAUSTED" : "")
+                    + ")"
+                );
+                const extension = counters.extension;
+                if (extension) {
+                    // Uzanti yalniz taban tam tarama NO_IMPROVEMENT dediginde kosar.
+                    lines.push(
+                        `   extension: wide-K ${extension.wideProbes} probes; pool ${extension.poolSize}/${extension.poolOffers}; `
+                        + `bridge ${extension.bridgeSplits} closures, ${extension.bridgeProbes} probes; `
+                        + `deep ${extension.deepProbes} probes, deviation round ${extension.deepRoundReached}; `
+                        + `${extension.validationCount} validations`
+                        + (extension.budgetStops ? `, BUDGET EXHAUSTED x${extension.budgetStops}` : "")
+                    );
+                }
+            });
+            if (!report.completed) {
+                lines.push("Macro step did not complete; 4-opt stall not proven.");
+            }
+            return lines.join("\n");
+        }
+
+        function runKbdbGrFourOpt() {
+            return runKbdbGrFourOptMode(arguments[0] === true);
+        }
+
+        function runKbdbGrFourOptMode(extension = false) {
+            if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
+            const reportElement = document.getElementById("doubleBridgeReport");
+            const button = document.getElementById(extension ? "btn-kbdbGrFourOptExtended" : "btn-kbdbGrFourOpt");
+            button.disabled = true;
+            reportElement.style.color = "";
+            reportElement.textContent = "KBDB + GR + 4opt running...";
+            setTimeout(() => {
+                try {
+                    world.pocketTreeOverlay = null;
+                    world.objectOccMode = "shared";
+                    const report = optimizeKbdbGrFourOpt(world, {
+                        baselineOptions: { kbdbOptions: { bridgeOptions: { log: true } } },
+                        fourOptOptions: extension ? { extension: true } : {}
+                    });
+                    reportElement.style.color = report.completed ? "" : "#b00020";
+                    updateReportWithCanvasLength(formatKbdbGrFourOptReport(report));
+                    requestAnimationFrame(drawWorld);
+                } catch (error) {
+                    console.error(error);
+                    reportElement.style.color = "#b00020";
+                    reportElement.textContent = `KBDB + GR + 4opt failed: ${error.message}`;
+                } finally {
+                    button.disabled = false;
+                }
+            }, 0);
+        }
+
+        let activeDbwcRun = null;
+        const DBWC_WORLD_REBUILD_LIMIT = 5000;
+
+        function countDbwcUiWork(meter, key, amount = 1) {
+            if (meter) meter[key] = (meter[key] || 0) + amount;
+        }
+
+        function sameDbwcInput(a, b, meter) {
+            if (a === null || b === null) return a === b;
+            return Array.isArray(a) && a.length === b.length && a.every((point, index) => {
+                countDbwcUiWork(meter, "stalePointComparisons");
+                const other = b[index];
+                return point.id === other.id && point.sourcePointId === other.sourcePointId
+                    && point.x === other.x && point.y === other.y
+                    && point.displayX === other.displayX && point.displayY === other.displayY;
+            });
+        }
+
+        function currentWorldDbwcPoints(meter) {
+            const collected = collectRoutePoints(world, meter);
+            const seed = routeTourSeed(world, collected, meter);
+            if (!seed || seed.length < 3) return null;
+            return seed.map((pointIndex, id) => {
+                countDbwcUiWork(meter, "worldRoutePointVisits");
+                const point = collected[pointIndex];
+                return {
+                    id,
+                    sourcePointId: point.sourcePointId ?? id,
+                    x: point.metricPosition.x,
+                    y: point.metricPosition.y,
+                    displayX: point.x,
+                    displayY: point.y
+                };
+            });
+        }
+
+        function directDbwcPoints(meter) {
+            const random = document.getElementById("randomPoints").checked;
+            const requested = Number(document.getElementById("pointCount").value);
+            if (random) {
+                if (!Number.isInteger(requested) || requested < 3 || requested > 100000) {
+                    throw new Error("Vertices Count must be between 3 and 100000");
+                }
+                const points = [];
+                const grid = new Map();
+                const canvas = document.getElementById("canvas");
+                const width = Math.max(canvas.width - 40, Math.ceil(Math.sqrt(requested)) * 3);
+                const height = Math.max(canvas.height - 40, Math.ceil(Math.sqrt(requested)) * 3);
+                const cellSize = 2;
+                const gridKey = (gx, gy) => `${gx}:${gy}`;
+                const isClear = (x, y) => {
+                    const gx = Math.floor(x / cellSize), gy = Math.floor(y / cellSize);
+                    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+                        countDbwcUiWork(meter, "randomGridBucketVisits");
+                        for (const point of grid.get(gridKey(gx + dx, gy + dy)) || []) {
+                            countDbwcUiWork(meter, "randomProximityTests");
+                            if ((point.displayX - x) ** 2 + (point.displayY - y) ** 2 < 4) return false;
+                        }
+                    }
+                    return true;
+                };
+                let attempts = 0;
+                while (points.length < requested && attempts < requested * 100) {
+                    countDbwcUiWork(meter, "randomAttempts");
+                    const x = 20 + Math.random() * width;
+                    const y = 20 + Math.random() * height;
+                    attempts++;
+                    const displayX = x + jitter(x, y);
+                    const displayY = y + jitter(y, displayX);
+                    if (!isClear(displayX, displayY)) continue;
+                    const point = {
+                        id: points.length,
+                        sourcePointId: `random-${points.length}`,
+                        x: displayX,
+                        y: displayY,
+                        displayX,
+                        displayY
+                    };
+                    points.push(point);
+                    const gx = Math.floor(displayX / cellSize), gy = Math.floor(displayY / cellSize);
+                    const key = gridKey(gx, gy), bucket = grid.get(key);
+                    if (bucket) bucket.push(point); else grid.set(key, [point]);
+                }
+                if (points.length !== requested) throw new Error(`Only ${points.length} unique points could be generated`);
+                const center = points.reduce((sum, point) => {
+                    countDbwcUiWork(meter, "randomCentroidPointVisits");
+                    return {
+                        x: sum.x + point.x / points.length,
+                        y: sum.y + point.y / points.length
+                    };
+                }, { x: 0, y: 0 });
+                return points.sort((a, b) => {
+                    countDbwcUiWork(meter, "randomSortComparisons");
+                    return Math.atan2(a.y - center.y, a.x - center.x)
+                        - Math.atan2(b.y - center.y, b.x - center.x) || a.id - b.id;
+                });
+            }
+
+            const input = document.getElementById("xmlInput").value.trim();
+            if (!input) throw new Error("Draw/load a route, enable random points, or enter XML");
+            const documentXml = new DOMParser().parseFromString(input, "text/xml");
+            const parserError = documentXml.getElementsByTagName("parsererror")[0];
+            if (parserError) throw new Error(`XML parsing error: ${parserError.textContent}`);
+            const elements = Array.from(documentXml.getElementsByTagName(XML_POINT_TAG));
+            if (elements.length < 3) throw new Error("XML must contain at least three points");
+            const polygons = new Set();
+            const sourceIds = new Set();
+            // NoktaNo hiçbir noktada yoksa Raw Route'taki gibi sırayla 1..n verilir.
+            const autoPointIds = elements.every(element => element.getAttribute(XML_ATTR_POINT_ID) === null);
+            const points = elements.map((element, id) => {
+                countDbwcUiWork(meter, "xmlPointVisits");
+                const displayX = Number(element.getAttribute(XML_ATTR_X));
+                const displayY = Number(element.getAttribute(XML_ATTR_Y));
+                const metricXValue = element.getAttribute(XML_ATTR_METRIC_X);
+                const metricYValue = element.getAttribute(XML_ATTR_METRIC_Y);
+                const x = metricXValue === null ? displayX : Number(metricXValue);
+                const y = metricYValue === null ? displayY : Number(metricYValue);
+                const polygon = Number(element.getAttribute(XML_ATTR_POLYNO));
+                const sourcePointId = autoPointIds ? String(id + 1) : element.getAttribute(XML_ATTR_POINT_ID);
+                if (![displayX, displayY, x, y, polygon].every(Number.isFinite) || sourcePointId === null) {
+                    throw new Error(`Invalid XML point at position ${id + 1}`);
+                }
+                if (sourceIds.has(sourcePointId)) throw new Error(`Duplicate NoktaNo: ${sourcePointId}`);
+                sourceIds.add(sourcePointId); polygons.add(polygon);
+                const jitteredX = displayX + jitter(displayX, displayY);
+                return {
+                    id,
+                    sourcePointId,
+                    x, y,
+                    displayX: jitteredX,
+                    displayY: displayY + jitter(displayY, jitteredX)
+                };
+            });
+            if (polygons.size !== 1) throw new Error("DBWC currently requires one polygon in the XML input");
+            return points;
+        }
+
+        function captureDbwcInput(mode, meter) {
+            const hasDirectInput = document.getElementById("randomPoints").checked
+                || document.getElementById("xmlInput").value.trim() !== "";
+            // Kalite ve alan tersleme kolları canlı turdan (önizleme ya da world) başlar.
+            const isQuality = mode === "quality" || String(mode).startsWith("rr-");
+            const fromPreview = isQuality && dbwcPreviewTour?.length > 2
+                ? dbwcPreviewTour.map(point => {
+                    countDbwcUiWork(meter, "previewPointCopies");
+                    return { ...point };
+                })
+                : null;
+            const fromWorld = !fromPreview && (isQuality || !hasDirectInput)
+                ? currentWorldDbwcPoints(meter)
+                : null;
+            const points = fromPreview || fromWorld || directDbwcPoints(meter);
+            return {
+                points,
+                startingWorld: world,
+                startingWorldTour: currentWorldDbwcPoints(meter),
+                sourceWorld: fromWorld ? world : null,
+                sourcePreview: !!fromPreview,
+                fieldState: fromWorld ? null : JSON.stringify({
+                    random: document.getElementById("randomPoints").checked,
+                    count: document.getElementById("pointCount").value,
+                    xml: document.getElementById("xmlInput").value
+                })
+            };
+        }
+
+        function dbwcLength(points, meter) {
+            let total = 0;
+            for (let i = 0; i < points.length; i++) {
+                countDbwcUiWork(meter, "routeLengthEdges");
+                const a = points[i], b = points[(i + 1) % points.length];
+                total += Math.hypot(a.x - b.x, a.y - b.y);
+            }
+            return total;
+        }
+
+        function assertDbwcSimple(points, xName, yName, meter, metricKey) {
+            const normalized = points.map(point => {
+                countDbwcUiWork(meter, "simplicityInputVisits");
+                return { x: point[xName], y: point[yName] };
+            });
+            const metrics = {};
+            const simple = DBWC.isSimpleTour(normalized, metrics);
+            if (meter && metricKey) meter[metricKey] = metrics;
+            if (!simple) {
+                throw new Error(`DBWC result crosses in ${xName === "x" ? "metric" : "display"} coordinates`);
+            }
+        }
+
+        function setDbwcRunning(running) {
+            for (const id of ["btnDbwcFast", "btnDbwcQuality", "btnRrTime", "btnRrBounded"]) {
+                const button = document.getElementById(id);
+                if (button) button.disabled = running;
+            }
+            document.getElementById("btnDbwcCancel").disabled = !running;
+        }
+
+        function dbwcProgressText(message) {
+            const names = {
+                "fast-warm": "Hilbert + Delaunay LK warm-up",
+                "fast-dbwc": "DBWC v1f",
+                "quality-baseline": "KBDB + GR + 4opt + bridge/deep",
+                "quality-dbwc": "DBWC v4",
+                "quality-completion": "Closure check of the improved tour",
+                "rr-time": "Region reversal (time-budgeted)",
+                "rr-bounded": "Region reversal (bounded)",
+                "rr-sample": "Region reversal: 2-factor sampling",
+                "rr-exact": "Region reversal: exact recombination inside U",
+                "rr-chain": "Region reversal: deep chain on the U candidate graph"
+            };
+            const details = [];
+            if (Number.isFinite(message.sample)) details.push(`sample ${message.sample}/${message.samples}`);
+            if (Number.isFinite(message.nodes)) details.push(`${message.nodes.toLocaleString("en-US")} branch-and-bound nodes`);
+            if (message.stage) details.push(`stage ${message.stage}`);
+            if (Number.isFinite(message.moves)) details.push(`${message.moves} moves`);
+            if (Number.isFinite(message.work)) details.push(`${message.work.toLocaleString("en-US")} work`);
+            return `${names[message.phase] || message.phase} running${details.length ? ` — ${details.join(", ")}` : ""}...`;
+        }
+
+        function finishDbwcRun(run) {
+            if (activeDbwcRun !== run) return;
+            clearTimeout(run.watchdog);
+            run.worker.terminate();
+            activeDbwcRun = null;
+            setDbwcRunning(false);
+        }
+
+        function cancelDbwcRun() {
+            if (!activeDbwcRun) return;
+            const run = activeDbwcRun;
+            finishDbwcRun(run);
+            updateReportWithCanvasLength("DBWC stopped by the user; live tour unchanged.");
+        }
+
+        function restoreDbwcLiveState(previousWorld, previousPreview) {
+            world = previousWorld;
+            dbwcPreviewTour = previousPreview;
+            try {
+                if (world?.totalNoktaList) {
+                    viewPos.setAttribute("max", Math.max(0, world.totalNoktaList.length - 1));
+                }
+                requestAnimationFrame(drawWorld);
+            } catch (error) {
+                console.error("DBWC rollback UI refresh failed", error);
+            }
+        }
+
+        function applyDbwcResult(run, result) {
+            if (performance.now() >= run.deadline) throw new Error("DBWC total time limit reached; live tour kept");
+            if (world !== run.capture.startingWorld
+                || !sameDbwcInput(currentWorldDbwcPoints(run.uiWork), run.capture.startingWorldTour, run.uiWork)) {
+                throw new Error("DBWC result is stale: the live world changed during the search");
+            }
+            if (run.capture.sourcePreview) {
+                if (!sameDbwcInput(dbwcPreviewTour, run.capture.points, run.uiWork)) {
+                    throw new Error("DBWC result is stale: the light preview changed");
+                }
+            } else if (run.capture.sourceWorld) {
+                const current = currentWorldDbwcPoints(run.uiWork);
+                if (world !== run.capture.sourceWorld || !current
+                    || !sameDbwcInput(current, run.capture.points, run.uiWork)) {
+                    throw new Error("DBWC result is stale: the live tour changed during the search");
+                }
+            } else {
+                const fieldState = JSON.stringify({
+                    random: document.getElementById("randomPoints").checked,
+                    count: document.getElementById("pointCount").value,
+                    xml: document.getElementById("xmlInput").value
+                });
+                if (fieldState !== run.capture.fieldState) throw new Error("DBWC result is stale: the input fields changed");
+            }
+
+            const byId = new Map(run.capture.points.map(point => {
+                countDbwcUiWork(run.uiWork, "idMapPointVisits");
+                return [point.id, point];
+            }));
+            PointSetContract.assertSame(run.pointSet, run.capture.points, "DBWC captured input", run.uiMeter);
+            if (!Array.isArray(result.tourIds) || result.tourIds.length !== byId.size
+                || new Set(result.tourIds).size !== byId.size) {
+                throw new Error("DBWC result is not a Hamiltonian tour");
+            }
+            const ordered = result.tourIds.map(id => {
+                countDbwcUiWork(run.uiWork, "idLookupVisits");
+                return byId.get(id);
+            });
+            if (ordered.some(point => !point)) throw new Error("DBWC result contains an unknown point");
+            PointSetContract.assertSame(run.pointSet, ordered, "DBWC result", run.uiMeter);
+            const validationStarted = performance.now();
+            assertDbwcSimple(ordered, "x", "y", run.uiWork, "metricSimplicity");
+            assertDbwcSimple(ordered, "displayX", "displayY", run.uiWork, "displaySimplicity");
+            run.timings.transferValidationMs = performance.now() - validationStarted;
+            const sourceLength = dbwcLength(run.capture.points, run.uiWork);
+            const finalLength = dbwcLength(ordered, run.uiWork);
+            if (!Number.isFinite(result.finalLength)
+                || Math.abs(finalLength - result.finalLength) > 1e-6) {
+                throw new Error("DBWC Worker result does not match the metric tour length");
+            }
+            const improvesSource = finalLength < sourceLength - 1e-7;
+            if (!improvesSource && (run.capture.sourceWorld || run.capture.sourcePreview)) {
+                return { applied: false, previewOnly: run.capture.sourcePreview, sourceLength, finalLength };
+            }
+
+            if (ordered.length > DBWC_WORLD_REBUILD_LIMIT) {
+                if (performance.now() >= run.deadline) throw new Error("DBWC total time limit reached; live tour kept");
+                dbwcPreviewTour = ordered;
+                requestAnimationFrame(drawWorld);
+                return { applied: true, previewOnly: true, sourceLength, finalLength };
+            }
+
+            const records = dbwcWorldRecords(ordered, run.uiWork);
+            const worldBuildStarted = performance.now();
+            run.uiWorldBuildWork = {};
+            const candidateWorld = buildWorldFromCollectedPoints(records, run.uiWorldBuildWork);
+            run.timings.worldBuildMs = performance.now() - worldBuildStarted;
+            const transferStarted = performance.now();
+            const collected = collectRoutePoints(candidateWorld, run.uiWork);
+            const seed = routeTourSeed(candidateWorld, collected, run.uiWork);
+            if (!seed || seed.length !== ordered.length
+                || new Set(seed).size !== ordered.length
+                || collected.length !== ordered.length) {
+                throw new Error(`DBWC world transfer lost points (${collected.length}/${ordered.length}) or did not form one tour`);
+            }
+            if (candidateWorld.totalNoktaList.some(point => {
+                countDbwcUiWork(run.uiWork, "derivedPointChecks");
+                return point?.turemis && !point.noktaSilindi;
+            })) {
+                throw new Error("DBWC world transfer created derived points");
+            }
+            const pointMultiset = points => points.map(point => {
+                countDbwcUiWork(run.uiWork, "multisetPointVisits");
+                return JSON.stringify([point.sourcePointId, point.x, point.y,
+                    point.metricPosition.x, point.metricPosition.y]);
+            }).sort((a, b) => {
+                countDbwcUiWork(run.uiWork, "multisetSortComparisons");
+                return a < b ? -1 : a > b ? 1 : 0;
+            });
+            const expectedPoints = pointMultiset(ordered.map(point => {
+                countDbwcUiWork(run.uiWork, "expectedPointVisits");
+                return {
+                    sourcePointId: point.sourcePointId, x: point.displayX, y: point.displayY,
+                    metricPosition: { x: point.x, y: point.y }
+                };
+            }));
+            const actualPoints = pointMultiset(collected);
+            if (expectedPoints.some((point, index) => {
+                countDbwcUiWork(run.uiWork, "multisetPointComparisons");
+                return point !== actualPoints[index];
+            })) {
+                throw new Error("DBWC world transfer changed point identities or coordinates");
+            }
+            assertSimpleOrder(seed.map(index => collected[index].noktaIndex), candidateWorld.totalNoktaList);
+            const candidateMetricTour = seed.map(index => {
+                countDbwcUiWork(run.uiWork, "rebuiltRoutePointVisits");
+                return { x: collected[index].metricPosition.x,
+                    y: collected[index].metricPosition.y };
+            });
+            run.uiWork.rebuiltSimplicity = {};
+            if (!DBWC.isSimpleTour(candidateMetricTour, run.uiWork.rebuiltSimplicity)) {
+                throw new Error("DBWC rebuilt world crosses in metric coordinates");
+            }
+            const candidateLength = dbwcLength(candidateMetricTour, run.uiWork);
+            if (Math.abs(candidateLength - finalLength) > 1e-6) {
+                throw new Error("DBWC world transfer changed metric tour length");
+            }
+            run.timings.transferValidationMs += performance.now() - transferStarted;
+            if (performance.now() >= run.deadline) throw new Error("DBWC total time limit reached; live tour kept");
+            const previousWorld = world, previousPreview = dbwcPreviewTour;
+            try {
+                world = candidateWorld;
+                dbwcPreviewTour = null;
+                viewPos.setAttribute("max", Math.max(0, world.totalNoktaList.length - 1));
+                updateViewPositionXmlMatch();
+                requestAnimationFrame(drawWorld);
+            } catch (error) {
+                restoreDbwcLiveState(previousWorld, previousPreview);
+                throw error;
+            }
+            return { applied: true, sourceLength, finalLength };
+        }
+
+        function dbwcModeName(mode) {
+            if (mode === "rr-time") return "Region Reversal (time-budgeted)";
+            if (mode === "rr-bounded") return "Region Reversal (bounded)";
+            return mode === "fast" ? "DBWC Fast" : "DBWC Quality";
+        }
+
+        // Region reversal raporu. Deneysel araştırma kolu.
+        function formatRrResult(result, applied, run) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const fmt = value => Number(value || 0).toLocaleString("en-US");
+            const rr = result.rr || {};
+            const union = rr.union || {}, settings = rr.settings || {}, work = rr.work || {}, flow = work.flow || {};
+            const application = applied.applied
+                ? applied.previewOnly ? "result applied to the light canvas preview; no mesh built" : "result applied to the canvas"
+                : "no improvement; live tour unchanged";
+            const lines = [
+                `${dbwcModeName(result.mode)} finished: ${application}.`,
+                `Input → result raw: ${raw(applied.sourceLength)} → ${raw(applied.finalLength)} (gain ${raw(applied.sourceLength - applied.finalLength)})`,
+                `Total call time: ${((performance.now() - run.started) / 1000).toFixed(2)} s; points: ${result.tourIds.length}; status: ${rr.status}`,
+                `Candidate union U: ${settings.samples} fractional 2-matching samples (noise ε = ${settings.noise}, ${settings.flip ? "Delaunay + opposite diagonal" : "Delaunay"}, seed ${settings.seed}); candidate edges ${fmt(union.candidateEdges)}, non-tour edges in U ${fmt(union.extraEdges)} (${Number(union.extraPerPoint || 0).toFixed(2)}/point).`,
+                `Sampling work: heap pops ${fmt(flow.heapPops)}, arc scans ${fmt(flow.arcScans)}, augmentations ${fmt(flow.augmentations)} (path steps ${fmt(flow.augmentSteps)}).`
+            ];
+            if (result.mode === "rr-time") {
+                const exact = rr.exact;
+                if (rr.status === "SKIPPED_POINT_LIMIT") lines.push(`Exact recombination skipped: n > ${settings.exactPointLimit} (exactTsp builds a dense matrix).`);
+                else if (exact) lines.push(`Exact recombination (exactTsp branch-and-bound, edges outside U penalized, live tour as starting incumbent): ${exact.optimal ? "proven best tour inside U" : `time ran out, lower-bound gap inside U ${Number.isFinite(exact.gap) ? (100 * exact.gap).toFixed(3) : "?"}%`}; ${fmt(exact.nodes)} nodes; ${((exact.elapsedMs || 0) / 1000).toFixed(2)} s.`);
+                else lines.push("Time ran out before the exact recombination started.");
+            } else {
+                lines.push(`Bounded chain (DBWC.search, U candidate graph, subtour window 6, depth 60): ${rr.moves ?? 0} moves; search work ${fmt(work.search)} / ${fmt(settings.workLimit)} (5000·n^1.7).`);
+                if (rr.log?.length) lines.push(`Moves: ${rr.log.join(" ")}`);
+            }
+            const timing = result.timings || {};
+            lines.push(`Timings ms: input ${run.timings.captureMs.toFixed(2)}, Worker ${result.elapsedMs.toFixed(2)} (load ${(timing.loadMs || 0).toFixed(2)}, union ${(timing.unionMs || 0).toFixed(2)}, recombination ${(timing.recombineMs || 0).toFixed(2)}, validation ${(timing.validationMs || 0).toFixed(2)}), world build ${(run.timings.worldBuildMs || 0).toFixed(2)}.`);
+            if (run.kit && result.workAccounting?.whole) lines.push(formatDbwcWholeCall(composeDbwcWholeCall(run.kit, result.workAccounting.whole)));
+            if (result.identity) lines.push(`Point/order digest: input ${result.identity.input}, result ${result.identity.output}.`);
+            lines.push("Experimental research branch; the result is applied only if it is shorter than the live tour and simple in both coordinate systems.");
+            return lines.join("\n");
+        }
+
+        function formatDbwcResult(result, applied, run) {
+            if (String(result.mode).startsWith("rr-")) return formatRrResult(result, applied, run);
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const application = applied.applied
+                ? applied.previewOnly
+                    ? "result applied to the light canvas preview; no mesh built"
+                    : "result applied to the canvas"
+                : "live tour is shorter/equal; unchanged";
+            const lines = [
+                `${dbwcModeName(result.mode)} finished: ${application}.`,
+                `Input → result raw: ${raw(applied.sourceLength)} → ${raw(applied.finalLength)} (gain ${raw(applied.sourceLength - applied.finalLength)})`,
+                `Total call time: ${((performance.now() - run.started) / 1000).toFixed(2)} s; points: ${result.tourIds.length}`
+            ];
+            const timing = result.timings || {};
+            lines.push(`Timings ms: input ${run.timings.captureMs.toFixed(2)}, Worker ${result.elapsedMs.toFixed(2)}, world build ${(run.timings.worldBuildMs || 0).toFixed(2)}, transfer/validation ${(run.timings.transferValidationMs || 0).toFixed(2)}; ObjectOcc not called during the UI transfer.`);
+            if (run.kit && result.workAccounting?.whole) lines.push(formatDbwcWholeCall(composeDbwcWholeCall(run.kit, result.workAccounting.whole)));
+            if (result.workAccounting?.complete) lines.push(`DBWC core's own search work (separate unit): warm-up ${result.workAccounting.warm || 0}, DBWC ${result.workAccounting.dbwc}${Number.isFinite(result.workAccounting.searchLimit) ? `, shared search ${result.workAccounting.searchUsed}/${result.workAccounting.searchLimit}` : ""}.`);
+            else if (result.workAccounting) lines.push(`Counted work: warm-up ${result.workAccounting.warm || 0}, DBWC ${result.workAccounting.dbwc}${Number.isFinite(result.workAccounting.searchLimit) ? `, shared search ${result.workAccounting.searchUsed}/${result.workAccounting.searchLimit}` : ""}, identity-contract point visits ${result.workAccounting.contractPointVisits}; not the work count of the whole call (unmetered stages: ${result.workAccounting.unmetered.join(", ")}; use the "Full work metering" option for a full count).`);
+            if (result.workAccounting?.contractHashCharacterVisits !== undefined) lines.push(`Worker identity-contract partial counts: digest characters ${result.workAccounting.contractHashCharacterVisits}, coordinate checks/comparisons ${result.workAccounting.contractCoordinateChecks || 0}/${result.workAccounting.contractCoordinateComparisons || 0}.`);
+            if (run.uiMeter) lines.push(`UI identity-contract partial counts: points ${run.uiMeter.pointVisits || 0}, digest characters ${run.uiMeter.hashCharacterVisits || 0}, coordinate checks/comparisons ${run.uiMeter.coordinateChecks || 0}/${run.uiMeter.coordinateComparisons || 0}; other UI transfer work not included.`);
+            if (run.inputWork) {
+                const input = run.inputWork;
+                lines.push(`UI input partial counts: world point scan/map/route steps ${input.collectPointVisits || 0}/${input.seedMapPointVisits || 0}/${input.seedRouteSteps || 0}, source points ${input.worldRoutePointVisits || 0}, preview copies ${input.previewPointCopies || 0}, random attempts/buckets/proximity/centroid/sort ${input.randomAttempts || 0}/${input.randomGridBucketVisits || 0}/${input.randomProximityTests || 0}/${input.randomCentroidPointVisits || 0}/${input.randomSortComparisons || 0}, XML points ${input.xmlPointVisits || 0}. These are not shared total work.`);
+            }
+            if (run.uiWork) {
+                const simplicity = [run.uiWork.metricSimplicity, run.uiWork.displaySimplicity,
+                    run.uiWork.rebuiltSimplicity];
+                const sum = key => simplicity.reduce((total, item) => total + (item?.[key] || 0), 0);
+                lines.push(`UI transfer partial counts: world point scan/map/route steps ${run.uiWork.collectPointVisits || 0}/${run.uiWork.seedMapPointVisits || 0}/${run.uiWork.seedRouteSteps || 0}, source/stale points ${run.uiWork.worldRoutePointVisits || 0}/${run.uiWork.stalePointComparisons || 0}, identity map/lookup ${run.uiWork.idMapPointVisits || 0}/${run.uiWork.idLookupVisits || 0}, route length edges ${run.uiWork.routeLengthEdges || 0}, simplicity index cells/query entries/segment pairs ${sum("indexCellVisits")}/${sum("queryBucketEntryVisits")}/${sum("segmentPairTests")}, world records ${run.uiWork.worldRecordVisits || 0}, multiset points/sort/comparisons ${run.uiWork.multisetPointVisits || 0}/${run.uiWork.multisetSortComparisons || 0}/${run.uiWork.multisetPointComparisons || 0}. These are not shared total work.`);
+            }
+            const worldBuildWork = result.workAccounting?.worldBuildWork;
+            if (worldBuildWork?.inputPointVisits) lines.push(`Worker world-build partial counts: ${worldBuildWork.inputPointVisits} input points, ${worldBuildWork.proximityTests || 0} proximity tests, ${worldBuildWork.routeIndexVisits || 0} route index visits, ${worldBuildWork.closingVisibilityChecks || 0} closing visibility checks.`);
+            if (run.uiWorldBuildWork?.inputPointVisits) lines.push(`UI world-build partial counts: ${run.uiWorldBuildWork.inputPointVisits} input points, ${run.uiWorldBuildWork.proximityTests || 0} proximity tests, ${run.uiWorldBuildWork.routeIndexVisits || 0} route index visits, ${run.uiWorldBuildWork.closingVisibilityChecks || 0} closing visibility checks.`);
+            const prep = result.workAccounting?.preparationWork;
+            if (prep && (prep.hilbert?.sortComparisons !== undefined
+                || prep.warm?.delaunay?.orientationTests !== undefined
+                || prep.dbwc?.delaunay?.orientationTests !== undefined)) {
+                const warm = prep.warm || {}, dbwc = prep.dbwc || {};
+                const delaunay = item => `${item?.orientationTests || 0}/${item?.inCircleTests || 0}`;
+                const validity = [prep.hilbertValidation, prep.outputMetricValidation,
+                    prep.outputDisplayValidation, prep.resultSimplicity,
+                    prep.fallbackSimplicity, warm.validation, dbwc.validation];
+                const sum = key => validity.reduce((total, item) => total + (item?.[key] || 0), 0);
+                lines.push(`Extra partial counts: Hilbert sort comparisons ${prep.hilbert?.sortComparisons || 0}; Delaunay orientation/in-circle tests warm-up ${delaunay(warm.delaunay)}, DBWC ${delaunay(dbwc.delaunay)}; candidate sort comparisons warm-up ${warm.candidate?.sortComparisons || 0}, DBWC ${dbwc.candidate?.sortComparisons || 0}; simplicity segment-pair tests ${sum("segmentPairTests")}. These are not the shared total work unit.`);
+                const delaunayPrep = [warm.delaunay, dbwc.delaunay];
+                const delaunaySum = key => delaunayPrep.reduce((total, item) => total + (item?.[key] || 0), 0);
+                lines.push(`Hilbert/Delaunay partial work: Hilbert bit steps ${(prep.hilbert?.hilbertIndexSteps || 0) + delaunaySum("hilbertIndexSteps")}, point insertions ${delaunaySum("pointInsertions")}, legalize stack steps ${delaunaySum("legalizeStackEntries")}, neighbor/edge lookups ${delaunaySum("neighborLookupSteps")}/${delaunaySum("edgeLookupSteps")}, final triangle/edge traversal ${delaunaySum("adjacencyTriangleVisits")}/${delaunaySum("adjacencyEdgeVisits")}.`);
+                const candidatePrep = [warm.candidate, dbwc.candidate];
+                const candidateSum = key => candidatePrep.reduce((total, item) => total + (item?.[key] || 0), 0);
+                lines.push(`Candidate preparation partial work: offset points ${candidateSum("offsetPointVisits")}, materialized candidate entries ${candidateSum("materializedEntries")}, refresh points/entries/views ${candidateSum("refreshPointVisits")}/${candidateSum("refreshEntryVisits")}/${candidateSum("refreshViewVisits")}.`);
+                const lengthEdges = (prep.selectedLength?.lengthEdgeVisits || 0)
+                    + (prep.initialLength?.lengthEdgeVisits || 0)
+                    + (prep.fallbackLength?.lengthEdgeVisits || 0)
+                    + (warm.length?.lengthEdgeVisits || 0) + (dbwc.length?.lengthEdgeVisits || 0)
+                    + (result.workAccounting?.validationWork?.baselineLength?.lengthEdgeVisits || 0)
+                    + (result.workAccounting?.validationWork?.completionLength?.lengthEdgeVisits || 0)
+                    + (result.workAccounting?.validationWork?.inputLength?.lengthEdgeVisits || 0);
+                lines.push(`Worker simplicity index partial work: points/edges/cells ${sum("indexPointVisits")}/${sum("indexEdgeVisits")}/${sum("indexCellVisits")}, query cells/entries ${sum("queryCellVisits")}/${sum("queryBucketEntryVisits")}; route length edges ${lengthEdges}.`);
+            }
+            const baselineWork = result.workAccounting?.baselineWork;
+            if (baselineWork) lines.push(`Quality baseline partial counts: KBDB rounds ${baselineWork.kbdbRounds}, GR own work ${baselineWork.geometricRepairWork}, 4opt chain probes ${baselineWork.fourOptChainProbes}, validations ${baselineWork.fourOptValidations}, extension bridge/deep probes ${baselineWork.fourOptBridgeProbes}/${baselineWork.fourOptDeepProbes}. Units are kept separate.`);
+            if (baselineWork) lines.push(`Quality KBDB partial counts: K-opt segments ${baselineWork.koptSegmentEvaluations || 0}, first/second bridge edges ${baselineWork.bridgeFirstEdgeVisits || 0}/${baselineWork.bridgeSecondEdgeVisits || 0}, candidate/arc steps ${baselineWork.bridgeCandidateChecks || 0}/${baselineWork.bridgeArcWalkSteps || 0}, reconnections ${baselineWork.bridgeReconnections || 0}, world capture objects ${baselineWork.bridgeWorldCaptureObjects || 0}. Units are kept separate.`);
+            const objectOccWork = result.workAccounting?.objectOccWork;
+            if (objectOccWork?.diagnosticCalls) lines.push(`ObjectOcc partial counts: ${objectOccWork.diagnosticCalls} calls, ${objectOccWork.lookAtAttempts} lookAt attempts, ${objectOccWork.triangleSteps} triangle steps, ${objectOccWork.intersectionPredicates} intersection tests, ${objectOccWork.coneSteps} shared cone steps, ${objectOccWork.sharedQueries} shared queries, ${objectOccWork.reverseIndexEntries} reverse index entries.`);
+            if (objectOccWork?.diagnosticCalls) lines.push(`ObjectOcc shared-path partial work: portal/seed/vertex/output ${objectOccWork.portalEntries}/${objectOccWork.seedEntries}/${objectOccWork.vertexChecks}/${objectOccWork.visibleOutputEntries}, frame/unresolved queries ${objectOccWork.frameQueries}/${objectOccWork.unresolvedQueries}, path entries ${objectOccWork.pathEntries}, endpoint queries/triangles ${objectOccWork.endpointQueries}/${objectOccWork.endpointTriangleSteps}.`);
+            if (result.identity) lines.push(`Point/order digest: input ${result.identity.input}, result ${result.identity.output} (diagnostic; acceptance uses a full identity/coordinate comparison).`);
+            if (result.mode === "quality") lines.push(`Worker stages ms: preparation ${timing.runtimeLoadMs?.toFixed(2)}, world ${timing.worldBuildMs?.toFixed(2)}, baseline ${timing.baselineMs?.toFixed(2)} (ObjectOcc ${timing.objectOccMs?.toFixed(2)}, ${timing.objectOccCalls || 0} calls), DBWC ${timing.dbwcMs?.toFixed(2)} (Delaunay ${timing.dbwcDelaunayMs?.toFixed(2)}), closure ${timing.completionMs?.toFixed(2)}, final validation ${timing.validationMs?.toFixed(2)}.`);
+            else lines.push(`Worker stages ms: preparation ${timing.preparationMs?.toFixed(2)}, warm-up ${timing.warmMs?.toFixed(2)} (Delaunay ${timing.warmDelaunayMs?.toFixed(2)}), DBWC ${timing.dbwcMs?.toFixed(2)} (Delaunay ${timing.dbwcDelaunayMs?.toFixed(2)}), final validation ${timing.validationMs?.toFixed(2)}.`);
+            if (result.baseline) {
+                lines.push(`Full pipeline: ${result.baseline.status}; ${raw(result.baseline.initialLength)} → ${raw(result.baseline.finalLength)}; ${(result.baseline.elapsedMs / 1000).toFixed(2)} s`);
+            }
+            if (result.warm) {
+                lines.push(`Warm-up: ${result.warm.status}; ${result.warm.moves} moves; ${(result.warm.elapsedMs / 1000).toFixed(2)} s`);
+            }
+            if (result.seedFallback) {
+                lines.push("The Hilbert order crosses itself, so the non-crossing input order was used as the fast start.");
+            }
+            if (result.fallback) {
+                lines.push(`When time ran out the last DBWC tour was not simple; ${result.fallback === "warm" ? "the last simple warm-up tour" : "the simple input tour"} was used as the safe result.`);
+            }
+            lines.push(`DBWC: ${result.dbwc.status}; ${result.dbwc.moves} moves; ${(result.dbwc.elapsedMs / 1000).toFixed(2)} s; ${result.dbwc.pairs.toLocaleString("en-US")} pairs; ${result.dbwc.work.toLocaleString("en-US")} counted work`);
+            // v4: "ad*" aşamaları, yüzeysel aşamanın bütçesine takılan başlangıçları büyük bütçeyle yeniden tarar.
+            const stats = result.dbwc.stats;
+            const sumOf = (list, key) => list.reduce((sum, stage) => sum + (stage[key] || 0), 0);
+            const shallow = stats.filter(stage => !stage.name.endsWith("*"));
+            const deep = stats.filter(stage => stage.name.endsWith("*"));
+            const deepened = new Set(deep.map(stage => stage.name.slice(0, -1)));
+            const uncovered = sumOf(shallow.filter(stage => !deepened.has(stage.name)), "budgetStarts")
+                + sumOf(deep, "budgetStarts") + sumOf(stats, "patchBudgetStarts");
+            if (sumOf(shallow, "budgetStarts") || uncovered) {
+                const deepText = deep.length
+                    ? `; deep rescan of ${sumOf(deep, "startsScanned")} starts (still capped: ${sumOf(deep, "budgetStarts")})`
+                    : "";
+                lines.push(`Scans capped by the per-start budget: ${sumOf(shallow, "budgetStarts")}${deepText}; patch start budget: ${sumOf(stats, "patchBudgetStarts")}.${uncovered ? " NO_IMPROVEMENT is not certain." : ""}`);
+            }
+            if (result.dbwc.log.length) lines.push(`Moves: ${result.dbwc.log.join(" ")}`);
+            if (result.completion?.requested) {
+                const c = result.completion;
+                lines.push(`Closure: ${c.reason}; ${(c.elapsedMs / 1000).toFixed(2)} s; ${raw(c.initialLength)} → ${raw(c.finalLength)}`);
+                if (c.error) lines.push(`Closure not applied: ${c.error}`);
+            }
+            return lines.join("\n");
+        }
+
+        // Tam çağrı iş ölçümü. Ölçümlü koşuda
+        // ana iş parçacığındaki DBWC fonksiyonları aynı kaynaktan enstrümante edilmiş
+        // kopyalarla, sayfa globallerini değiştirmeyen yalıtılmış bir kapsamda koşar.
+        // Ölçümsüz (varsayılan) yol aşağıdaki özgün fonksiyonları kullanır.
+        const DBWC_WORK_KIT_FUNCTIONS = ["countDbwcUiWork", "sameDbwcInput", "currentWorldDbwcPoints",
+            "directDbwcPoints", "captureDbwcInput", "dbwcLength", "assertDbwcSimple", "applyDbwcResult"];
+        const DBWC_WORK_KIT_BUILDER = ["collectRoutePoints", "routeTourSeed", "dbwcWorldRecords",
+            "worldTransferDigest"];
+        let dbwcWorkKitSources = null;
+        let dbwcWorkKitLoading = false;
+
+        function readDbwcWorkMetering() {
+            const enabled = document.getElementById("dbwcWorkMeter");
+            if (!enabled || enabled.checked !== true) return null;
+            const raw = String(document.getElementById("dbwcWorkBudget")?.value ?? "").trim();
+            if (raw === "") return { limit: null };
+            const millions = Number(raw);
+            if (!Number.isFinite(millions) || millions <= 0) {
+                throw new Error("DBWC work budget must be a positive number (million steps)");
+            }
+            return { limit: Math.round(millions * 1e6) };
+        }
+
+        function loadDbwcScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error(`${src} could not be loaded`));
+                document.head.appendChild(script);
+            });
+        }
+
+        function pageScriptUrl(file) {
+            const script = Array.from(document.scripts).find(item =>
+                (item.getAttribute("src") || "").split("?")[0] === file);
+            return script ? script.getAttribute("src") : file;
+        }
+
+        async function loadDbwcWorkKit() {
+            if (dbwcWorkKitSources) return dbwcWorkKitSources;
+            if (!window.acorn) await loadDbwcScript("js/vendor/acorn.js");
+            if (!window.WorkMeter) await loadDbwcScript("js/meter/workMeter.js");
+            const texts = await Promise.all(["js/dbwc/dbwcCore.js", "js/dbwc/pointSetContract.js", "js/tsp/routeTransaction.js",
+                "js/core/worldBuilder.js", "js/core/helper.js"].map(async file => {
+                const response = await fetch(pageScriptUrl(file));
+                if (!response.ok) throw new Error(`${file} could not be fetched (${response.status})`);
+                return response.text();
+            }));
+            const [core, contract, transaction, builder, helper] = texts;
+            const inline = Array.from(document.scripts).map(item => item.textContent)
+                .find(text => text.includes("function applyDbwcResult("));
+            if (!inline) throw new Error("DBWC UI source not found");
+            const options = { acorn: window.acorn };
+            const instrument = code => {
+                const output = WorkMeter.instrument(code, options);
+                if (output.unhandled.length) throw new Error("Source contains an unmeterable construct");
+                return output.code;
+            };
+            dbwcWorkKitSources = [
+                { code: instrument(core) },
+                { code: instrument(contract) },
+                { code: instrument(transaction) },
+                { code: "const DBWC = __isolatedRoot.DBWC, PointSetContract = __isolatedRoot.PointSetContract, "
+                    + "assertSimpleOrder = __isolatedRoot.assertSimpleOrder;" },
+                { code: instrument(WorkMeter.extractFunctions(builder, DBWC_WORK_KIT_BUILDER, options)),
+                    strict: true, declares: DBWC_WORK_KIT_BUILDER },
+                { code: instrument(WorkMeter.extractFunctions(helper,
+                    ["fract", "pseudoRandom01", "quantize", "jitter"], options)) },
+                { code: instrument(WorkMeter.extractFunctions(inline, DBWC_WORK_KIT_FUNCTIONS, options)) }
+            ];
+            return dbwcWorkKitSources;
+        }
+
+        function createDbwcWorkKit(metering, sources) {
+            // Kitin modül ilklendirmesi (sayfada üretimde bir kez, burada her koşuda) ayrı aşamadır.
+            const meter = WorkMeter.createMeter({ limit: metering.limit, stage: "ui.kitInit" });
+            const pageBuild = buildWorldFromCollectedPoints;
+            let api = null;
+            let rehearsal = null;
+            const provided = {
+                ...meter.hooks,
+                // UI world kurması sayfanın ölçülmeyen koduyla koşar; işi aynı kayıtlarla
+                // ölçümlü Worker'da yapılan provadan alınır ve kurulan world'ün özeti
+                // provanınkiyle eşleşmezse sonuç uygulanmaz.
+                buildWorldFromCollectedPoints(records) {
+                    if (!rehearsal || rehearsal.skipped || rehearsal.recordCount !== records.length) {
+                        throw new Error("Full work metering: no world-build rehearsal; result not applied");
+                    }
+                    const previous = meter.switchStage("ui.apply.worldBuild");
+                    meter.absorb(rehearsal.build);
+                    meter.pause();
+                    let built;
+                    try {
+                        built = pageBuild(records);
+                    } finally {
+                        meter.resume();
+                    }
+                    meter.switchStage(previous);
+                    if (api.worldTransferDigest(built) !== rehearsal.digest) {
+                        throw new Error("Full work metering: UI world build differs from the metered Worker rehearsal; result not applied");
+                    }
+                    return built;
+                },
+                updateViewPositionXmlMatch: meter.unmetered(updateViewPositionXmlMatch),
+                restoreDbwcLiveState: meter.unmetered(restoreDbwcLiveState),
+                DOMParser: class {
+                    parseFromString(text, type) {
+                        meter.charge(String(text).length, "dom.parse");
+                        return new window.DOMParser().parseFromString(text, type);
+                    }
+                }
+            };
+            api = WorkMeter.evaluateIsolated(sources, provided,
+                ["captureDbwcInput", "applyDbwcResult", "PointSetContract", "worldTransferDigest"]);
+            const section = (stage, fn) => {
+                meter.switchStage(stage);
+                const uninstall = meter.installNatives(window);
+                try {
+                    return fn();
+                } finally {
+                    uninstall();
+                }
+            };
+            return {
+                meter,
+                limit: metering.limit,
+                capture(mode, inputWork, uiMeter) {
+                    return section("ui.capture", () => {
+                        const capture = api.captureDbwcInput(mode, inputWork);
+                        const pointSet = api.PointSetContract.snapshot(capture.points, "DBWC UI input", uiMeter);
+                        meter.charge(capture.points.length, "message.send");
+                        return { capture, pointSet };
+                    });
+                },
+                apply(run, result) {
+                    const worker = result.workAccounting?.whole;
+                    if (!worker || worker.complete !== true) throw new Error("Worker did not return a full work count");
+                    rehearsal = result.transferRehearsal || null;
+                    // Tek, yenilenmeyen bütçe: Worker'ın harcadığı iş UI aktarımının payından düşer.
+                    if (metering.limit !== null) meter.state.limit = metering.limit - worker.total;
+                    return section("ui.apply", () => {
+                        meter.charge(result.tourIds.length, "message.receive");
+                        return api.applyDbwcResult(run, result);
+                    });
+                }
+            };
+        }
+
+        function composeDbwcWholeCall(kit, worker) {
+            const ui = kit.meter.snapshot();
+            const byStage = { ...ui.byStage };
+            for (const [name, steps] of Object.entries(worker.byStage || {})) {
+                byStage[name] = (byStage[name] || 0) + steps;
+            }
+            const total = ui.total + worker.total;
+            // Yalnız ölçümlü koşuda yapılan iş: Worker'daki aktarım provası ve sayfa kitinin ilklendirmesi.
+            const meteringOnly = (byStage["transfer.rehearsal"] || 0) + (byStage["ui.kitInit"] || 0);
+            return { unit: "step", complete: worker.complete === true, exhausted: ui.exhausted || worker.exhausted,
+                limit: kit.limit, total, calls: ui.calls + worker.calls, loops: ui.loops + worker.loops,
+                native: ui.native + worker.native, byStage, ui: ui.total, worker: worker.total,
+                meteringOnly, productionEquivalent: total - meteringOnly };
+        }
+
+        function formatDbwcWholeCall(whole) {
+            const fmt = value => Number(value || 0).toLocaleString("en-US");
+            const stage = name => fmt(whole.byStage[name]);
+            const workerStages = Object.entries(whole.byStage)
+                .filter(([name, steps]) => !name.startsWith("ui.") && steps !== 0)
+                .sort((a, b) => b[1] - a[1])
+                .map(([name, steps]) => `${name} ${fmt(steps)}`).join(", ");
+            return [
+                `Whole-call work (single unit: step; complete count: ${whole.complete ? "yes" : "no"}): total ${fmt(whole.total)}${whole.limit === null ? "" : ` / budget ${fmt(whole.limit)}`}; calls ${fmt(whole.calls)}, loops ${fmt(whole.loops)}, native bulk operations ${fmt(whole.native)}.`,
+                `Step stages: UI input ${stage("ui.capture")}; Worker ${fmt(whole.worker)} (${workerStages}); UI transfer ${fmt((whole.byStage["ui.apply"] || 0) + (whole.byStage["ui.apply.worldBuild"] || 0))} (world build, from rehearsal: ${stage("ui.apply.worldBuild")}).`,
+                `Production equivalent (excluding work done only in metered runs: transfer rehearsal ${stage("transfer.rehearsal")}, kit initialization ${stage("ui.kitInit")}): ${fmt(whole.productionEquivalent)} steps.`
+            ].join("\n");
+        }
+
+        function runDbwcMode(mode) {
+            if (activeDbwcRun || dbwcWorkKitLoading) return;
+            // Kalite ve alan tersleme canlı turdan başlar (önizleme ya da world); Hız 3 noktada çalışıyor.
+            // Canlı turda 3'ten az nokta varsa captureDbwcInput XML'e düşer, o yüzden yalnız tam 3'te durulur.
+            const livePointCount = dbwcPreviewTour?.length > 2
+                ? dbwcPreviewTour.length : collectRoutePoints(world).length;
+            if (mode !== "fast" && livePointCount === 3 && stopIfTourTooSmall(livePointCount)) return;
+            const reportElement = document.getElementById("doubleBridgeReport");
+            let metering;
+            try {
+                metering = readDbwcWorkMetering();
+            } catch (error) {
+                reportElement.style.color = "#b00020";
+                updateReportWithCanvasLength(`DBWC could not start: ${error.message}`);
+                return;
+            }
+            if (!metering) {
+                startDbwcRun(mode, null, null);
+                return;
+            }
+            dbwcWorkKitLoading = true;
+            setDbwcRunning(true);
+            updateReportWithCanvasLength(`${dbwcModeName(mode)}: instrumenting sources for full work metering...`);
+            loadDbwcWorkKit().then(sources => {
+                dbwcWorkKitLoading = false;
+                setDbwcRunning(false);
+                startDbwcRun(mode, metering, sources);
+            }, error => {
+                dbwcWorkKitLoading = false;
+                setDbwcRunning(false);
+                reportElement.style.color = "#b00020";
+                updateReportWithCanvasLength(`DBWC full work metering could not be set up: ${error.message}`);
+                console.error(error);
+            });
+        }
+
+        function startDbwcRun(mode, metering, kitSources) {
+            const reportElement = document.getElementById("doubleBridgeReport");
+            try {
+                const kit = metering ? createDbwcWorkKit(metering, kitSources) : null;
+                const started = performance.now();
+                if (typeof Worker !== "function") throw new Error("This browser does not support Web Workers");
+                if (location.protocol === "file:") {
+                    throw new Error("DBWC Worker requires a local HTTP server (for example: python -m http.server 8765)");
+                }
+                const seconds = Number(document.getElementById("dbwcTimeLimit").value);
+                if (!Number.isFinite(seconds) || seconds < 5 || seconds > 3600) {
+                    throw new Error("DBWC time limit must be between 5 and 3600 seconds");
+                }
+                const deadline = started + seconds * 1000;
+                const uiMeter = { pointVisits: 0 };
+                const uiWork = {};
+                const inputWork = {};
+                let capture, pointSet;
+                if (kit) ({ capture, pointSet } = kit.capture(mode, inputWork, uiMeter));
+                else {
+                    capture = captureDbwcInput(mode, inputWork);
+                    pointSet = PointSetContract.snapshot(capture.points, "DBWC UI input", uiMeter);
+                }
+                const captureMs = performance.now() - started;
+                if (performance.now() >= deadline) throw new Error("DBWC input preparation used up the time limit");
+                const worker = new Worker("js/dbwcWorker.js");
+                const run = { worker, capture, pointSet, uiMeter, uiWork, inputWork, mode, started, deadline,
+                    timings: { captureMs }, watchdog: null, kit };
+                activeDbwcRun = run;
+                setDbwcRunning(true);
+                reportElement.style.color = "";
+                updateReportWithCanvasLength(`${dbwcModeName(mode)} Worker starting — ${capture.points.length} points, time limit ${seconds} s${kit ? `, full work metering${kit.limit === null ? "" : ` (budget ${kit.limit.toLocaleString("en-US")} steps)`}` : ""}...`);
+                worker.onmessage = event => {
+                    if (activeDbwcRun !== run) return;
+                    const message = event.data || {};
+                    if (message.type === "progress") {
+                        updateReportWithCanvasLength(dbwcProgressText(message));
+                        return;
+                    }
+                    if (message.type === "error") {
+                        finishDbwcRun(run);
+                        reportElement.style.color = "#b00020";
+                        const workText = run.kit && message.work
+                            ? `\n${formatDbwcWholeCall(composeDbwcWholeCall(run.kit, message.work))}` : "";
+                        updateReportWithCanvasLength(`DBWC failed: ${message.message}${workText}`);
+                        console.error(message.stack || message.message);
+                        return;
+                    }
+                    if (message.type === "result") {
+                        const previousWorld = world, previousPreview = dbwcPreviewTour;
+                        try {
+                            if (performance.now() >= run.deadline) throw new Error("DBWC total time limit reached; live tour kept");
+                            const applied = run.kit ? run.kit.apply(run, message.result)
+                                : applyDbwcResult(run, message.result);
+                            const reportText = formatDbwcResult(message.result, applied, run);
+                            if (performance.now() >= run.deadline) throw new Error("DBWC total time limit reached; live tour kept");
+                            finishDbwcRun(run);
+                            updateReportWithCanvasLength(reportText);
+                        } catch (error) {
+                            if (world !== previousWorld || dbwcPreviewTour !== previousPreview) {
+                                restoreDbwcLiveState(previousWorld, previousPreview);
+                            }
+                            finishDbwcRun(run);
+                            reportElement.style.color = "#b00020";
+                            updateReportWithCanvasLength(`DBWC result not applied: ${error.message}`);
+                            console.error(error);
+                        }
+                    }
+                };
+                worker.onerror = event => {
+                    if (activeDbwcRun !== run) return;
+                    finishDbwcRun(run);
+                    reportElement.style.color = "#b00020";
+                    updateReportWithCanvasLength(`DBWC Worker error: ${event.message}`);
+                };
+                run.watchdog = setTimeout(() => {
+                    if (activeDbwcRun !== run) return;
+                    finishDbwcRun(run);
+                    reportElement.style.color = "#b00020";
+                    updateReportWithCanvasLength(`DBWC stopped at the ${seconds} s time limit; live tour unchanged.`);
+                }, Math.max(0, deadline - performance.now()));
+                worker.postMessage({ type: "run", mode, points: capture.points,
+                    timeLimitMs: Math.max(1, deadline - performance.now()),
+                    ...(kit ? { workMeter: true, workBudget: kit.limit === null ? null : kit.meter.remaining(),
+                        transferRehearsal: true, worldRebuildLimit: DBWC_WORLD_REBUILD_LIMIT } : {}) });
+            } catch (error) {
+                reportElement.style.color = "#b00020";
+                updateReportWithCanvasLength(`DBWC could not start: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        function formatAdjacentBlockSwapReport(report) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const headline = {
+                COMMITTED: "Adjacent block swap committed.",
+                NO_IMPROVEMENT: "No shortening adjacent block swap found.",
+                ADDED_EDGE_INTERSECTION: "Best adjacent block swap rejected: new edges would cross.",
+                TRANSACTION_REJECTED: `Adjacent block swap rejected by the route transaction: ${report.error}`
+            }[report.reason] || report.reason;
+            const lines = [
+                headline,
+                `Raw Euclidean: ${raw(report.initialLength)} -> ${raw(report.finalLength)}`,
+                `TSPLIB EUC_2D: ${report.initialTsplibLength} -> ${report.finalTsplibLength} `
+                + `(improvement ${report.initialTsplibLength - report.finalTsplibLength})`,
+                `Candidates visited: ${report.counters.candidateVisitCount} / ${report.candidateVisitLimit} `
+                + `(improving ${report.counters.improvingCandidateCount}, `
+                + `duplicate ${report.counters.duplicateCycleCount})`
+            ];
+            if (report.move) {
+                lines.push(
+                    `Best move: blocks of ${report.move.blockLengths[0]} and ${report.move.blockLengths[1]} points, `
+                    + `removed ${report.move.removedEdgeKeys.join(", ")}, `
+                    + `added ${report.move.addedEdgeKeys.join(", ")}, `
+                    + `delta ${report.move.deltaTsplib} TSPLIB / ${raw(report.move.deltaRaw)} raw`
+                );
+            }
+            return lines.join("\n");
+        }
+
+        /**
+         * Turdaki yan yana iki nokta bloğunun (her biri en fazla 4 nokta) yerini
+         * değiştirerek turu kısaltmayı dener. Tek geçişli ve sınırlı bir taramadır:
+         * tüm blok çiftlerini bir kez dener, bulduğu tek en iyi hamleyi uygular.
+         */
+        function runAdjacentBlockSwap() {
+            if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
+            const reportElement = document.getElementById("doubleBridgeReport");
+            try {
+                console.time("Swap Adjacent Blocks");
+                const report = optimizeAdjacentBlockSwap(world);
+                console.timeEnd("Swap Adjacent Blocks");
+                updateReportWithCanvasLength(formatAdjacentBlockSwapReport(report));
+                requestAnimationFrame(drawWorld);
+            } catch (error) {
+                console.error(error);
+                reportElement.textContent = `Swap Adjacent Blocks failed: ${error.message}`;
+            }
+        }
+
+        function formatPairedChainRepairReport(report, elapsedMs) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const headline = {
+                COMMITTED: "Paired chain repair committed.",
+                NO_IMPROVEMENT: "No shortening paired chain repair found.",
+                ADDED_EDGE_INTERSECTION: "Best paired chain repair rejected: new edges would cross.",
+                TRANSACTION_REJECTED: `Paired chain repair rejected by the route transaction: ${report.error}`
+            }[report.reason] || report.reason;
+            const counters = report.counters;
+            const lines = [
+                headline,
+                `Search took ${(elapsedMs / 1000).toFixed(1)} s`
+                + (report.scopeBound ? ` and stopped early: ${report.scopeBound}` : ""),
+                `Raw Euclidean: ${raw(report.initialLength)} -> ${raw(report.finalLength)}`,
+                `TSPLIB EUC_2D: ${report.initialTsplibLength} -> ${report.finalTsplibLength} `
+                + `(improvement ${report.initialTsplibLength - report.finalTsplibLength})`,
+                `Candidate graph: ${counters.candidateEdgeCount} edges kept of `
+                + `${counters.eligibleEdgeCount} visible (pruned ${counters.candidateCapPruneCount})`,
+                `Half chains: ${counters.halfStateExpansionCount} expansions, `
+                + `${counters.indexedHalfStateCount} indexed, ${counters.beamTruncationCount} beam truncations`,
+                `Joins: ${counters.joinProbeCount} probes, ${counters.repairRequiredCount} needed repair; `
+                + `repairs: ${counters.repairProbeCount} probes, ${counters.repairFinalistCount} finalists`
+            ];
+            if (report.move) {
+                lines.push(
+                    `Best move: ${report.move.exchangeDepth}-edge exchange, `
+                    + `delta ${report.move.deltaTsplib} TSPLIB / ${raw(report.move.deltaRaw)} raw`,
+                    `  removed ${report.move.removedEdgeKeys.join(", ")}`,
+                    `  added ${report.move.addedEdgeKeys.join(", ")}`,
+                    `  bridges ${report.move.lineage.bridgeEdgeKeys.join(", ")}, `
+                    + `joined components ${report.move.lineage.joinedComponentSizes.join(" + ")}`
+                );
+            }
+            return lines.join("\n");
+        }
+
+        /**
+         * İki yarı zinciri köprü kenarlarıyla eşleştirip ortaya çıkan iki halkayı
+         * iki kenarlık onarımla tek tura kapatır. Görünürlükten kurulan aday
+         * grafiği üzerinde çalışır ve pahalıdır: 76 noktalı bir turda dakikalar
+         * sürebilir, bu yüzden arama öncesi ekrana durum yazıp bir kare bekliyoruz.
+         */
+        function runPairedChainRepair() {
+            const reportElement = document.getElementById("doubleBridgeReport");
+            reportElement.textContent = "Paired chain repair running... this can take minutes on larger routes.";
+            setTimeout(() => {
+                try {
+                    console.time("Paired Chain Repair");
+                    const startedAt = performance.now();
+                    const report = optimizePairedChainRepair(world);
+                    const elapsedMs = performance.now() - startedAt;
+                    console.timeEnd("Paired Chain Repair");
+                    updateReportWithCanvasLength(formatPairedChainRepairReport(report, elapsedMs));
+                    requestAnimationFrame(drawWorld);
+                } catch (error) {
+                    console.error(error);
+                    reportElement.textContent = `Paired Chain Repair failed: ${error.message}`;
+                }
+            }, 0);
+        }
+
+        function formatKoptAndBatchedBranchedDoubleBridgeReport(report) {
+            const raw = value => Number.isFinite(value) ? value.toFixed(6) : String(value);
+            const lines = [
+                `K-opt + batched branched double bridge (raw): ${raw(report.initialLength)} -> ${raw(report.finalLength)}`,
+                `Raw improvement: ${raw(report.improvement)}`,
+                `TSPLIB EUC_2D: ${report.initialTsplibLength} -> ${report.finalTsplibLength} (improvement ${report.tsplibImprovement})`,
+                `Rounds: ${report.roundCount}, batch commits: ${report.totalBatchCommits}, committed bridges: ${report.totalCommittedBridges}`,
+                `ObjectOcc rebuilds: ${report.totalObjectOccRebuilds}, reused K-opt snapshots: ${report.totalVisibilityReusedRounds}`,
+                `World captures: ${report.totalWorldCaptures}, final verification: ${report.finalVerificationMs.toFixed(2)} ms`
+            ];
+            report.rounds.forEach((round, index) => {
+                const bridge = round.bridge;
+                lines.push(
+                    `Round ${index + 1}: K-opt ${raw(round.kopt.initialLength)} -> ${raw(round.kopt.finalLength)}; `
+                    + `batch ${bridge.status}, selected ${bridge.candidateCount}, committed ${bridge.committedCount}, raw delta ${raw(bridge.immediateDelta)}`
+                );
+            });
+            return lines.join("\n");
+        }
+
+        function runKoptThenBranchedDoubleBridgeOptimization() {
+            if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
+            const reportElement = document.getElementById("doubleBridgeReport");
+            try {
+                console.time("K-opt + Branched Double Bridge");
+                world.pocketTreeOverlay = null;
+                const report = optimizeKoptAndBatchedBranchedDoubleBridge(world, {
+                    bridgeOptions: { log: true }
+                });
+                updateReportWithCanvasLength(formatKoptAndBatchedBranchedDoubleBridgeReport(report));
+                console.timeEnd("K-opt + Branched Double Bridge");
+                requestAnimationFrame(drawWorld);
+            } catch (error) {
+                console.error(error);
+                reportElement.textContent = `K-opt + Branched Double Bridge failed: ${error.message}`;
+            }
+        }
+
+
+        function findConnections(noktaNo) {
+
+            //const activeNokta = world.totalNoktaList[viewPos.value];
+            const activeNokta = world.totalNoktaList[noktaNo];
+            //activeNokta.connectibleNoktalar = new Set();
+            world.etkinGeo.polyNo = -2;
+            world.etkinGeo.ucgenNo = -1;
+            world.aramailkNoktasi = activeNokta;
+
+            for (let i = 0; i < activeNokta.aralikList.length; i++) {
+                if (activeNokta.aralikList[i].disabled == false) {
+                    world.totalNoktaList.forEach((nokta, noktaSay) => {
+                        if ((nokta.noktaNo < 0)) { //|| activeNokta.connectibleNoktalar.has(nokta.noktaNo))
+                            return;
+                        }
+
+                        world.etkinGeo = pointToPointQuery2(
+                            activeNokta,
+                            nokta.kendiYeri,
+                            false,
+                            activeNokta.aralikList[i],
+                            0,
+                            world.totalNoktaList,
+                            world.totalUcgenList,
+                            world
+                        );
+
+                        if (world.etkinGeo.durum > 0) {
+                            let connectible = true;
+                            if (world.etkinGeo?.ilKesilenDiskenar !== undefined && world.etkinGeo.ilKesilenDiskenar != null) {
+                                connectible = false;
+                            } else {
+                                activeNokta.connectibleNoktalar.add(nokta.noktaNo);
+                            }
+                            return;
+                        }
+                    });
+                }
+            }
+        }
+
+
+
+        function findAllConnections() {
+            for (let i = 0; i < world.totalNoktaList.length; i++) {
+                //world.aramailkNoktasi = 6
+                findConnections(i);
+            }
+        }
+
+        // Noktaları merkez etrafında açısal olarak sıralar.
+        function angularSort(points) {
+            if (points.length < 3) return points;
+            let sumX = 0, sumY = 0;
+            for (let i = 0; i < points.length; i++) {
+                sumX += points[i][0];
+                sumY += points[i][1];
+            }
+            let centerX = sumX / points.length;
+            let centerY = sumY / points.length;
+
+            let withAngles = points.map(pt => ({
+                point: pt,
+                x: pt[0],
+                y: pt[1],
+                angle: Math.atan2(pt[1] - centerY, pt[0] - centerX)
+            }));
+
+            withAngles.sort((a, b) => a.angle - b.angle);
+            return withAngles.map(obj => obj.point);
+        }
+
+        function areTrianglesEqual(triangle1, triangle2, world) {
+            // Her iki üçgenin de tam olarak 3 kenara sahip olduğundan emin olalım
+            if (triangle1.kenarList.length !== 3 || triangle2.kenarList.length !== 3) {
+                return false;
+            }
+
+            // Üçgenin unique noktalarını toplayan yardımcı fonksiyon
+            function getUniquePoints(triangle) {
+                const points = new Set();
+                triangle.kenarList.forEach(kenar => {
+                    points.add(kenar.uc1NoktaNo);
+                    points.add(kenar.uc2NoktaNo);
+                });
+                return Array.from(points).sort(); // Unique ve sıralı liste
+            }
+
+            // Her iki üçgenin unique noktalarını al
+            const points1 = getUniquePoints(triangle1);
+            const points2 = getUniquePoints(triangle2);
+
+            // Eğer her iki üçgen de tam olarak 3 unique noktaya sahip değilse, false
+            if (points1.length !== 3 || points2.length !== 3) {
+                return false;
+            }
+
+            // Noktaların koordinatlarını string formatına çeviren yardımcı fonksiyon
+            const toString = pointNo => {
+                const point = world.totalNoktaList[pointNo].kendiYeri;
+                return `${point.x},${point.y}`;
+            };
+
+            // Her iki üçgenin noktalarını string'e çevirip sırala
+            const sortedPoints1 = points1.map(toString).sort();
+            const sortedPoints2 = points2.map(toString).sort();
+
+            // Sıralı dizileri birleştirip karşılaştır
+            return sortedPoints1.join(';') === sortedPoints2.join(';');
+        }
+
+
+
+        // World nesnesini konsola yazdır (hata ayıklama için)
+        console.log("World:", world);
+
+        function getCanvasCoordinates(event) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        }
+
+        // mousedown event handler'ı
+        function handleMouseDown(event) {
+            // Gerekliyse kullanılacak nesne (eğer kullanılmıyorsa kaldırılabilir)
+            //const mdAnswer = new PointToAnswer();
+            const loc = getCanvasCoordinates(event);
+            loc.x += jitter(loc.x, loc.y);
+            loc.y += jitter(loc.y, loc.x);
+            kendiYeriler = [];
+
+            if (!chkCornerToCorner.checked) {
+                if (world.totalNoktaList.length === 5 && !ilkNoktaDegisti) {
+                    // Tutarlı koordinat dönüşümü ile nokta güncellemesi
+                    world.totalNoktaList[4].kendiYeri = loc;
+                    ilkNoktaDegisti = true;
+                } else {
+                    // Koordinatlar hesaplanarak Ucgenle fonksiyonu çağrılıyor
+                    world.targetNokta.kendiYeri = loc;
+                    Ucgenle(loc, true, world.targetNokta, world.polygonList.length - 1, world);
+                }
+            } else if (world.cemberList.length > 0) {
+
+                let uc1Nokta = world.aramailkNoktasi;
+                let uc2Nokta = world.totalNoktaList[world.cemberList[world.cemberList.length - 1]];
+                if (uc1Nokta.aralikList[world.mouseSeciliAralik].gidenUcNo != uc2Nokta.noktaNo &&
+                    uc1Nokta.aralikList[world.mouseSeciliAralik].gelenUcNo != uc2Nokta.noktaNo) {
+
+
+                    let mdAnswer = new PointToAnswer();
+
+                    mdAnswer = connectPoints(
+                        uc2Nokta,
+                        uc1Nokta,
+                        uc1Nokta.aralikList[world.mouseSeciliAralik],
+                        mdAnswer,
+                        -1,
+                        world);
+
+                    if (mdAnswer.connected) {
+                        boyamaKenari1 = world.totalUcgenList[mdAnswer.earSonUcgen].kenarList[2];
+                        boyamaKenari1.polyKenar = false;
+                        boyamaKenari1.disKenar = true;
+                        boyamaKenari1.kenarPolyNo = 0 //reKenar.kenarPolyNo;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].polyKenar = false;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].disKenar = true;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].kenarPolyNo = 0 //reKenar.kenarPolyNo;
+
+                        world.aramailkNoktasi = world.totalNoktaList[world.cemberList[world.cemberList.length - 1]];
+                    }
+
+
+                } else {
+                    if (uc1Nokta.aralikList[world.mouseSeciliAralik].gidenUcNo == uc2Nokta.noktaNo) {
+                        let boyamaKenari1 = world.totalUcgenList[uc1Nokta.aralikList[world.mouseSeciliAralik].ucgenNo]
+                            .kenarList[uc1Nokta.aralikList[world.mouseSeciliAralik].ucgeniciGidenKenarNo];
+                        boyamaKenari1.polyKenar = false;
+                        boyamaKenari1.disKenar = true;
+                        boyamaKenari1.kenarPolyNo = 0;//reKenar.kenarPolyNo;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].polyKenar = false;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].disKenar = true;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].kenarPolyNo = 0 //reKenar.kenarPolyNo;
+                        //this.world.KenardanUcgenBoya(boyamaKenari1, uc1Nokta.aralikList[world.mouseSeciliAralik].ucgenNo, uc1Nokta.noktaPolyNo);
+                        //reKenar.Yenile = false;
+                        //break;
+                    }
+                    if (uc1Nokta.aralikList[world.mouseSeciliAralik].gelenUcNo == uc2Nokta.noktaNo) {
+                        let boyamaKenari1 = world.totalUcgenList[uc1Nokta.aralikList[world.mouseSeciliAralik].ucgenNo]
+                            .kenarList[uc1Nokta.aralikList[world.mouseSeciliAralik].ucgeniciGelenKenarNo];
+                        boyamaKenari1.polyKenar = false;
+                        boyamaKenari1.disKenar = true;
+                        boyamaKenari1.kenarPolyNo = 0; //reKenar.kenarPolyNo;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].polyKenar = false;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].disKenar = true;
+                        world.totalUcgenList[boyamaKenari1.komsuNo].kenarList[boyamaKenari1.komsudaKacinciKenarNo].kenarPolyNo = 0 //reKenar.kenarPolyNo;
+                        //this.world.KenardanUcgenBoya(boyamaKenari1, uc1Nokta.aralikList[world.mouseSeciliAralik].ucgenNo, uc1Nokta.noktaPolyNo);
+                        //reKenar.Yenile = false;
+                        //break;                        
+                    }
+                    world.aramailkNoktasi = world.totalNoktaList[uc2Nokta.noktaNo];
+                }
+
+                world.cemberList = [];
+            }
+
+            viewPos.value = world.aramailkNoktasi.noktaNo;
+            updateViewPositionXmlMatch();
+
+            requestAnimationFrame(drawWorld);
+        }
+
+        function pboxCanvas_MouseMove(event) {
+            const loc = getCanvasCoordinates(event);
+            world.targetNokta.kendiYeri = loc;
+            world.cemberList = [];
+            world.etkinGeo.polyNo = -2;
+            world.etkinGeo.ucgenNo = -1;
+
+            for (let i = 0; i < world.aramailkNoktasi.aralikList.length; i++) {
+                if (world.aramailkNoktasi.aralikList[i].disabled == false) {
+                    world.etkinGeo = pointToPointQuery2(
+                        world.aramailkNoktasi,
+                        world.targetNokta.kendiYeri,
+                        true,
+                        world.aramailkNoktasi.aralikList[i],
+                        0,
+                        world.totalNoktaList,
+                        world.totalUcgenList,
+                        world
+                    );
+
+                    if (world.etkinGeo.durum > 0) {
+                        world.aramailkNoktasi.aralikList[i].boya = true;
+                        world.mouseSeciliAralik = i;
+                        break;
+                    } else {
+                        world.aramailkNoktasi.aralikList[i].boya = false;
+                    }
+                }
+            }
+
+            requestAnimationFrame(drawWorld);
+            mouseCoords.textContent = `Mouse Coordinates: (${Math.round(loc.x)}, ${Math.round(loc.y)})`;
+            if (world.etkinGeo.ucgenNo > -1) {
+                let triObj = world.totalUcgenList[world.etkinGeo.ucgenNo];
+                triInfo.textContent = "Triangle: " + world.etkinGeo.ucgenNo;
+                triInfo.textContent += " filled: " + triObj.dolu;
+                kenar0Info.textContent = "Edge0 outer edge: " + triObj.kenarList[0].disKenar + ", Poly: " + triObj.kenarList[0].polyKenar;
+                kenar1Info.textContent = "Edge1 outer edge: " + triObj.kenarList[1].disKenar + ", Poly: " + triObj.kenarList[1].polyKenar;
+                kenar2Info.textContent = "Edge2 outer edge: " + triObj.kenarList[2].disKenar + ", Poly: " + triObj.kenarList[2].polyKenar;
+                if (world.etkinGeo?.ilKesilenDiskenar !== undefined && world.etkinGeo.ilKesilenDiskenar != null) {
+                    ilkKesilenDisKenar.textContent = "First cut outer edge: "
+                        + world.etkinGeo.ilKesilenDiskenar.uc1NoktaNo
+                        + "-"
+                        + world.etkinGeo.ilKesilenDiskenar.uc2NoktaNo
+                        + " - State: " + world.etkinGeo.durum;
+                } else {
+                    ilkKesilenDisKenar.textContent = "First cut outer edge: none. State: " + world.etkinGeo.durum;
+                }
+            }
+        }
+
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('mousemove', pboxCanvas_MouseMove);
+
+        viewPos.addEventListener("input", updateViewPositionXmlMatch);
+
+        viewPos.addEventListener("change", function (event) {
+
+            viewPos.setAttribute("max", Math.max(0, world.totalNoktaList.length - 1));
+
+            //console.log("Yeni değer: " + event.target.value);
+            if (event.target.value < world.totalNoktaList.length) {
+                world.aramailkNoktasi = world.totalNoktaList[event.target.value];
+                //if (world.aramailkNoktasi?.connectibleNoktalar == undefined || world.aramailkNoktasi.connectibleNoktalar == null) {
+                //findConnections(event.target.value);
+                //}
+            }
+
+            updateViewPositionXmlMatch();
+
+            requestAnimationFrame(drawWorld);
+
+        });
+
+        chkViewVisibles.addEventListener("change", function (event) {
+            requestAnimationFrame(drawWorld);
+        });
+
+        btnDisconnect.addEventListener('click', () => disconnectSegment(world.aramailkNoktasi, [], world, 3, null, null));
+        btnkoptStart.addEventListener('click', () => {
+            console.time("Process Time");
+            world.pocketTreeOverlay = null;
+            koptStart();
+            console.timeEnd("Process Time");
+            updateReportWithCanvasLength();
+            requestAnimationFrame(drawWorld);
+        });
+
+        canvas.addEventListener('mouseenter', () => {
+            isCursorOverCanvas = true;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            isCursorOverCanvas = false;
+        });
+
+        updateViewPositionXmlMatch();
+        drawWorld();
+
+    </script>
+</body>
+
+</html>

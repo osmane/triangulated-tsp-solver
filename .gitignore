@@ -1,0 +1,8 @@
+# Local tool settings
+.claude/
+.kilo/
+.vscode/
+node_modules/
+
+# Release preparation notes (not published)
+YAYIN-HAZIRLIK-HANDOFF.md
