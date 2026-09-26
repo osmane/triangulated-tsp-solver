@@ -8,6 +8,8 @@ k-opt, double bridge, geometric repair, 4-opt, DBWC and Region Reversal. Small i
 This is a research prototype. Several buttons are marked *(experimental)* in the interface, and apart from Exact TSP
 no method is guaranteed to find the optimal tour.
 
+**Live demo:** https://osmane.github.io/triangulated-tsp-solver/
+
 ![A 150-point tour drawn over the triangle mesh](screenshot.png)
 
 ## How it works
