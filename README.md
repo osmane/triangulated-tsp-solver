@@ -55,8 +55,21 @@ If the XML has `MetricX`/`MetricY`, the length in those coordinates is shown as 
 A `<P>` element whose `X` or `Y` is missing or not a number is skipped, and the report says how many were skipped.
 Tour-improvement moves need at least 4 points; with 3 points the tour is already optimal.
 
-The order of the `<P>` elements is the starting tour, so it should not cross itself. DBWC Quality rejects a starting tour
-that crosses itself. Random points are ordered by their angle around the center of the point set.
+The order of the `<P>` elements is the starting tour. Random points are ordered by their angle around the center of the
+point set.
+
+### Closed tour, no self-intersections
+
+The TSP solvers work only on a closed tour that does not cross itself. Two tours do not qualify:
+
+- **A self-intersecting tour** (a polygon whose edges cross each other). The solvers do not work on it. Load or draw a
+  tour whose edges do not cross.
+- **An open tour.** If you draw the tour by hand (click on the canvas with **Connect Points** off), each click adds a
+  point and connects it to the previous one. The tour is not complete until the last point is connected back to the
+  first one: finish by clicking on the first point again.
+
+If you run a solver on such a tour, an alert explains the problem and the solver does not start. **Exact TSP** and
+**DBWC Fast** with XML or random input are the exception: they only use the points and build their own tour.
 
 **Copy Points** copies the current points to the clipboard as XML. **Paste Points** pastes XML from the clipboard into
 the text box.
@@ -146,7 +159,7 @@ bound. DBWC Quality is a heuristic, so it does not guarantee the optimal tour.
 
 | Control | What it does |
 |---|---|
-| Connect Points | Changes what a click on the canvas does. Off: the click adds a point. On: the click connects the selected point. |
+| Connect Points | Changes what a click on the canvas does. Off: the click adds a point and connects it to the previous one; a click on the first point closes the tour. On: the click connects the selected point. |
 | Disconnect Selected Point | Disconnects the selected point (see **Selected point** below). |
 | Swap Adjacent Blocks | One pass that swaps two neighbouring blocks of up to 4 points each. It applies the best swap it finds. |
 | Paired Chain Repair *(slow)* | A deeper repair move built from the visibility data. It can take minutes even for about 75 points. |

@@ -1162,6 +1162,27 @@
             return true;
         }
 
+        // Tur iyileştiriciler çizili turu tek kapalı, kendini kesmeyen çevrim olarak okur. Kesişim noktaları
+        // türemiş nokta olarak eklenir; routeTourSeed açık ya da parçalı rotada null döner. İkisinde de alert.
+        function stopIfTourNotSolvable() {
+            if (!world?.totalNoktaList) return false;
+            const points = collectRoutePoints(world);
+            if (points.length < 3) return false; // Az nokta: çözücülerin kendi mesajları geçerli.
+            let message = null;
+            if (world.totalNoktaList.some(nokta => nokta?.turemis && !nokta.noktaSilindi)) {
+                message = "The tour crosses itself. TSP solvers do not work on a self-intersecting tour.\n\n"
+                    + "Load or draw a tour whose edges do not cross each other.";
+            } else if (!routeTourSeed(world, points)) {
+                message = "The tour is not closed. TSP solvers need one closed tour through all points.\n\n"
+                    + "If you draw the tour by hand, complete it by clicking on the first point again "
+                    + "(with Connect Points off). This connects the last point to the first one.\n"
+                    + "After Convex Layers, run Merge Layers to join the layers into one tour.";
+            }
+            if (!message) return false;
+            alert(message);
+            return true;
+        }
+
         /**
          * Tuvaldeki noktalardan convex layers hesaplar ve her katmanı ayrı bir
          * kapalı poligon (PolyNo = katman indeksi) olarak yeniden çizer.
@@ -1427,6 +1448,7 @@
         }
 
         function runBranchedDoubleBridgeOptimization() {
+            if (stopIfTourNotSolvable()) return;
             if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
             const reportElement = document.getElementById("doubleBridgeReport");
             try {
@@ -1478,6 +1500,7 @@
         }
 
         function runGeometricRepair() {
+            if (stopIfTourNotSolvable()) return;
             if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
             const reportElement = document.getElementById("doubleBridgeReport");
             const button = document.getElementById("btn-geometricRepair");
@@ -1523,6 +1546,7 @@
         }
 
         function runIterativeRandomVisibilityRepair() {
+            if (stopIfTourNotSolvable()) return;
             const reportElement = document.getElementById("doubleBridgeReport");
             const button = document.getElementById("btn-iterativeRandomVisibilityRepair");
             button.disabled = true;
@@ -1577,6 +1601,7 @@
         }
 
         function runKbdbAndGeometricRepair() {
+            if (stopIfTourNotSolvable()) return;
             if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
             const reportElement = document.getElementById("doubleBridgeReport");
             const button = document.getElementById("btn-kbdbGeometricRepair");
@@ -1678,6 +1703,7 @@
         }
 
         function runKbdbGrFourOptMode(extension = false) {
+            if (stopIfTourNotSolvable()) return;
             if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
             const reportElement = document.getElementById("doubleBridgeReport");
             const button = document.getElementById(extension ? "btn-kbdbGrFourOptExtended" : "btn-kbdbGrFourOpt");
@@ -2408,6 +2434,12 @@
 
         function runDbwcMode(mode) {
             if (activeDbwcRun || dbwcWorkKitLoading) return;
+            // Hız XML/rastgele girişte noktalardan kendi turunu kurar; Kalite ve alan tersleme önizleme yoksa
+            // canlı turdan başlar. Canlı tur kullanılacaksa kapalı ve kendini kesmeyen olmalı.
+            const hasDirectInput = document.getElementById("randomPoints").checked
+                || document.getElementById("xmlInput").value.trim() !== "";
+            const usesLiveTour = mode === "fast" ? !hasDirectInput : !(dbwcPreviewTour?.length > 2);
+            if (usesLiveTour && stopIfTourNotSolvable()) return;
             // Kalite ve alan tersleme canlı turdan başlar (önizleme ya da world); Hız 3 noktada çalışıyor.
             // Canlı turda 3'ten az nokta varsa captureDbwcInput XML'e düşer, o yüzden yalnız tam 3'te durulur.
             const livePointCount = dbwcPreviewTour?.length > 2
@@ -2568,6 +2600,7 @@
          * tüm blok çiftlerini bir kez dener, bulduğu tek en iyi hamleyi uygular.
          */
         function runAdjacentBlockSwap() {
+            if (stopIfTourNotSolvable()) return;
             if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
             const reportElement = document.getElementById("doubleBridgeReport");
             try {
@@ -2625,6 +2658,7 @@
          * sürebilir, bu yüzden arama öncesi ekrana durum yazıp bir kare bekliyoruz.
          */
         function runPairedChainRepair() {
+            if (stopIfTourNotSolvable()) return;
             const reportElement = document.getElementById("doubleBridgeReport");
             reportElement.textContent = "Paired chain repair running... this can take minutes on larger routes.";
             setTimeout(() => {
@@ -2664,6 +2698,7 @@
         }
 
         function runKoptThenBranchedDoubleBridgeOptimization() {
+            if (stopIfTourNotSolvable()) return;
             if (stopIfTourTooSmall(collectRoutePoints(world).length)) return;
             const reportElement = document.getElementById("doubleBridgeReport");
             try {
@@ -2975,6 +3010,7 @@
 
         btnDisconnect.addEventListener('click', () => disconnectSegment(world.aramailkNoktasi, [], world, 3, null, null));
         btnkoptStart.addEventListener('click', () => {
+            if (stopIfTourNotSolvable()) return;
             console.time("Process Time");
             world.pocketTreeOverlay = null;
             koptStart();
