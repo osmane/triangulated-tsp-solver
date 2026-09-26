@@ -274,7 +274,7 @@
                     </label>
                     <label for="xmlInput">XML Coordinates:</label>
                     <textarea id="xmlInput" placeholder=""></textarea>
-                    <button onclick="generatePoints()">Draw Raw Route</button>
+                    <button id="drawRawRouteButton" onclick="generatePoints()">Draw Raw Route <span id="drawRawRouteSource" aria-live="polite">(Text Area)</span></button>
                     <div class="point-xml-buttons">
                         <button onclick="copyPoints()">Copy Points</button>
                         <button onclick="pastePoints()">Paste Points</button>
@@ -384,6 +384,16 @@
 </Points>`;
         document.getElementById("xmlInput").placeholder = xml;
 
+        const randomPointsCheckbox = document.getElementById("randomPoints");
+        const drawRawRouteSource = document.getElementById("drawRawRouteSource");
+
+        function updateDrawRawRouteSource() {
+            drawRawRouteSource.textContent = randomPointsCheckbox.checked ? "(Random)" : "(Text Area)";
+        }
+
+        randomPointsCheckbox.addEventListener("change", updateDrawRawRouteSource);
+        updateDrawRawRouteSource();
+
         // Seçilen örnek XML'i examples/ klasöründen alır, textarea'ya yazar ve Raw Route çizer.
         async function loadExample(select) {
             const file = select.value;
@@ -394,6 +404,7 @@
                 if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
                 document.getElementById("xmlInput").value = await response.text();
                 document.getElementById("randomPoints").checked = false;
+                updateDrawRawRouteSource();
                 generatePoints();
             } catch (e) {
                 console.error("Example could not be loaded:", e);
