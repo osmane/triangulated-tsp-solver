@@ -11,36 +11,180 @@
             flex-direction: row;
             align-items: flex-start;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             gap: 20px;
-            margin: 20px;
-            padding: 0;
+            margin: 0;
+            padding: 2vh 20px;
+            box-sizing: border-box;
         }
 
+        /* Sol panel: bölümler içerikleri kadar yer tutar (ekranı aşarsa kendi içinde kayar);
+           rapor altlarında başlar ve aşağı doğru uzar, gerekirse sayfa kayar. Rapor bölümleri daraltmaz. */
         .controls {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             width: 300px;
-            /* Kontroller için sabit genişlik */
+            flex: 0 0 300px;
+        }
+
+        .control-sections {
+            flex: 0 0 auto;
+            max-height: calc(96vh - 4em);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 4px;
+        }
+
+        .section {
+            border: 1px solid #c8c8c8;
+            border-radius: 4px;
+            padding: 6px 8px;
+        }
+
+        .section>summary,
+        .section>h2 {
+            margin: 0;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .section>h2 {
+            cursor: default;
+        }
+
+        .section-body {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .section-note {
+            margin: 0;
+            font-size: 0.85em;
+            color: #555;
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .input-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px 8px;
+        }
+
+        #pointCount {
+            width: 6em;
+        }
+
+        #exampleSelect {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .controls button {
+            padding: 5px 10px;
+            border: 1px solid #8f8f8f;
+            border-bottom-color: #6f6f6f;
+            border-radius: 4px;
+            background: linear-gradient(#ffffff, #e4e4e4);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+            color: #1a1a1a;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        .controls button:enabled:hover {
+            background: linear-gradient(#ffffff, #d8d8d8);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+
+        .controls button:enabled:active {
+            background: linear-gradient(#dcdcdc, #eeeeee);
+            box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.3);
+            transform: translateY(1px);
+        }
+
+        .controls button:focus-visible {
+            outline: 2px solid #1a73e8;
+            outline-offset: 1px;
+        }
+
+        .controls button:disabled {
+            border-color: #cfcfcf;
+            background: #f2f2f2;
+            box-shadow: none;
+            color: #9a9a9a;
+            cursor: not-allowed;
+        }
+
+        .flow-button {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .flow-button .flow-detail {
+            font-size: 0.85em;
+        }
+
+        .controls .primary-button:enabled {
+            border-color: #1b5e20;
+            background: linear-gradient(#43a047, #2e7d32);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            color: #fff;
+        }
+
+        .controls .primary-button:enabled:hover {
+            background: linear-gradient(#4caf50, #276b2b);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        }
+
+        .controls .primary-button:enabled:active {
+            background: linear-gradient(#276b2b, #388e3c);
+            box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.4);
+        }
+
+        #doubleBridgeReport {
+            flex: 0 0 auto;
+            min-height: 3em;
+            margin: 0;
+            padding-top: 6px;
+            border-top: 2px solid #888;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
         }
 
         #canvasContainer {
             flex: 1;
             height: 96vh;
-            /* Ekranın %80 yüksekliği */
+            /* Uzun rapor sayfayı kaydırınca canvas görünür kalsın. */
+            position: sticky;
+            top: 2vh;
             overflow: auto;
             border: 1px solid black;
         }
 
         textarea {
             width: 100%;
-            height: 200px;
+            height: 140px;
+            box-sizing: border-box;
             resize: vertical;
         }
 
         #mouseCoords {
-            margin-top: 10px;
             font-weight: bold;
         }
 
@@ -87,32 +231,10 @@
             flex: 1;
         }
 
-        .dbwc-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-            padding-block: 4px;
-        }
-
-        .dbwc-controls button {
-            min-width: 0;
-        }
-
-        .dbwc-controls label {
-            grid-column: 1 / -1;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-        }
-
         #dbwcTimeLimit,
         #dbwcWorkBudget {
             width: 7em;
-        }
-
-        #btnDbwcCancel {
-            grid-column: 1 / -1;
+            flex: 0 0 auto;
         }
     </style>
 </head>
@@ -120,61 +242,132 @@
 <body>
 
     <div class="controls">
-        <div id="mouseCoords">Mouse Coordinates: (x, y)</div>
-        <label><input type="checkbox" id="randomPoints"> Generate Random Vertices</label>
-        <label for="pointCount">Vertices Count</label>
-        <input type="number" id="pointCount" value="15" min="3" max="100000">
-        <label for="xmlInput">XML Coordinates:</label>
-        <textarea id="xmlInput" placeholder=""></textarea>
-        <button onclick="generatePoints()">Raw Route</button>
-        <button id="btn-koptStart">K-opt Start</button>
-        <button onclick="runBranchedDoubleBridgeOptimization()">Branched Double Bridge</button>
-        <button onclick="runKoptThenBranchedDoubleBridgeOptimization()">K-opt + Branched Double Bridge</button>
-        <button id="btn-geometricRepair" onclick="runGeometricRepair()">Geometric Repair (experimental)</button>
-        <button id="btn-iterativeRandomVisibilityRepair" onclick="runIterativeRandomVisibilityRepair()">Iterative Random Visibility Repair (experimental)</button>
-        <button id="btn-kbdbGeometricRepair" onclick="runKbdbAndGeometricRepair()">KBDB + Geometric Repair (experimental)</button>
-        <button id="btn-kbdbGrFourOpt" onclick="runKbdbGrFourOpt()">KBDB + GR + 4opt (experimental)</button>
-        <button id="btn-kbdbGrFourOptExtended" onclick="runKbdbGrFourOpt(true)">KBDB + GR + 4opt + bridge/deep (experimental)</button>
-        <div class="dbwc-controls">
-            <button id="btnDbwcFast" onclick="runDbwcMode('fast')">DBWC Fast: Hilbert + Delaunay LK + v1f</button>
-            <button id="btnDbwcQuality" onclick="runDbwcMode('quality')">DBWC Quality: full pipeline + v4</button>
-            <button id="btnRrTime" onclick="runDbwcMode('rr-time')" title="Applied to the live tour (run DBWC Quality first). 30 perturbed 2-factor unions + exact solve inside U; uses the DBWC time limit.">Region Reversal: time-budgeted (2-factor union + exact)</button>
-            <button id="btnRrBounded" onclick="runDbwcMode('rr-bounded')" title="Applied to the live tour (run DBWC Quality first). Same union + deep chain on the U candidate graph; search work capped at 5000·n^1.7.">Region Reversal: bounded (n^1.7 work, deep chain)</button>
-            <label for="dbwcTimeLimit">DBWC time limit (s)
-                <input type="number" id="dbwcTimeLimit" value="120" min="5" max="3600" step="5">
-            </label>
-            <label for="dbwcWorkMeter">Full work metering (instrumented, slow)
-                <input type="checkbox" id="dbwcWorkMeter">
-            </label>
-            <label for="dbwcWorkBudget">Work budget (million steps; empty = unlimited)
-                <input type="number" id="dbwcWorkBudget" min="0" step="1" placeholder="unlimited">
-            </label>
-            <button id="btnDbwcCancel" onclick="cancelDbwcRun()" disabled>Stop DBWC</button>
+        <div class="control-sections">
+            <section class="section">
+                <h2>Input</h2>
+                <div class="section-body">
+                    <div class="input-row">
+                        <label><input type="checkbox" id="randomPoints"> Generate Random Vertices</label>
+                        <label for="pointCount">Count <input type="number" id="pointCount" value="15" min="3" max="100000"></label>
+                    </div>
+                    <label for="exampleSelect" class="setting-row">Example
+                        <select id="exampleSelect" onchange="loadExample(this)">
+                            <option value="">Choose an example…</option>
+                            <optgroup label="TSPLIB (start tour / optimal tour)">
+                                <option value="berlin52-start.xml">berlin52 · 52 pts · start</option>
+                                <option value="berlin52-optimal.xml">berlin52 · 52 pts · optimal (7542)</option>
+                                <option value="pr76-start.xml">pr76 · 76 pts · start</option>
+                                <option value="pr76-optimal.xml">pr76 · 76 pts · optimal (108159)</option>
+                                <option value="tsp225-start.xml">tsp225 · 225 pts · start</option>
+                                <option value="tsp225-optimal.xml">tsp225 · 225 pts · optimal (3916)</option>
+                                <option value="pcb442-start.xml">pcb442 · 442 pts · start</option>
+                                <option value="pcb442-optimal.xml">pcb442 · 442 pts · optimal (50778)</option>
+                                <option value="pr1002-start.xml">pr1002 · 1002 pts · start</option>
+                                <option value="pr1002-optimal.xml">pr1002 · 1002 pts · optimal (259045)</option>
+                            </optgroup>
+                            <optgroup label="Random">
+                                <option value="random-uniform-250.xml">Uniform · 250 pts</option>
+                                <option value="random-clustered-400.xml">Clustered · 400 pts</option>
+                                <option value="random-uniform-800.xml">Uniform · 800 pts</option>
+                            </optgroup>
+                        </select>
+                    </label>
+                    <label for="xmlInput">XML Coordinates:</label>
+                    <textarea id="xmlInput" placeholder=""></textarea>
+                    <button onclick="generatePoints()">Draw Raw Route</button>
+                    <div class="point-xml-buttons">
+                        <button onclick="copyPoints()">Copy Points</button>
+                        <button onclick="pastePoints()">Paste Points</button>
+                    </div>
+                </div>
+            </section>
+
+            <details class="section">
+                <summary>Pipeline Steps</summary>
+                <div class="section-body">
+                    <button id="btn-koptStart">K-opt Start</button>
+                    <button onclick="runBranchedDoubleBridgeOptimization()">Branched Double Bridge</button>
+                    <button onclick="runKoptThenBranchedDoubleBridgeOptimization()">K-opt + Branched Double Bridge</button>
+                    <button id="btn-geometricRepair" onclick="runGeometricRepair()">Geometric Repair</button>
+                    <button id="btn-iterativeRandomVisibilityRepair" onclick="runIterativeRandomVisibilityRepair()">Iterative Random Visibility Repair</button>
+                    <button id="btn-kbdbGeometricRepair" onclick="runKbdbAndGeometricRepair()">KBDB + Geometric Repair</button>
+                    <button id="btn-kbdbGrFourOpt" onclick="runKbdbGrFourOpt()">KBDB + GR + 4opt</button>
+                    <button id="btn-kbdbGrFourOptExtended" onclick="runKbdbGrFourOpt(true)">KBDB + GR + 4opt + bridge/deep</button>
+                </div>
+            </details>
+
+            <details class="section" open>
+                <summary>Main Flow</summary>
+                <div class="section-body">
+                    <button id="btnDbwcFast" class="flow-button" onclick="runDbwcMode('fast')"><strong>DBWC Fast</strong><span class="flow-detail">Hilbert + Delaunay LK + v1f</span></button>
+                    <button id="btnDbwcQuality" class="flow-button primary-button" onclick="runDbwcMode('quality')"><strong>DBWC Quality</strong><span class="flow-detail">full pipeline + v4</span></button>
+                    <label for="dbwcTimeLimit" class="setting-row">DBWC time limit (s)
+                        <input type="number" id="dbwcTimeLimit" value="120" min="5" max="3600" step="5">
+                    </label>
+                    <label for="dbwcWorkMeter" class="setting-row">Full work metering (instrumented, slow)
+                        <input type="checkbox" id="dbwcWorkMeter">
+                    </label>
+                    <label for="dbwcWorkBudget" class="setting-row">Work budget (million steps; empty = unlimited)
+                        <input type="number" id="dbwcWorkBudget" min="0" step="1" placeholder="unlimited">
+                    </label>
+                    <button id="btnDbwcCancel" onclick="cancelDbwcRun()" disabled>Stop DBWC</button>
+                </div>
+            </details>
+
+            <details class="section">
+                <summary>Experimental Flows</summary>
+                <div class="section-body">
+                    <p class="section-note">Run on the live tour (run DBWC Quality first). They use the Main Flow settings and Stop DBWC.</p>
+                    <button id="btnRrTime" class="flow-button" onclick="runDbwcMode('rr-time')" title="Applied to the live tour (run DBWC Quality first). 30 perturbed 2-factor unions + exact solve inside U; uses the DBWC time limit."><strong>Region Reversal: time-budgeted</strong><span class="flow-detail">2-factor union + exact</span></button>
+                    <button id="btnRrBounded" class="flow-button" onclick="runDbwcMode('rr-bounded')" title="Applied to the live tour (run DBWC Quality first). Same union + deep chain on the U candidate graph; search work capped at 5000·n^1.7."><strong>Region Reversal: bounded</strong><span class="flow-detail">n^1.7 work, deep chain</span></button>
+                </div>
+            </details>
+
+            <details class="section">
+                <summary>Exact Solver</summary>
+                <div class="section-body">
+                    <p class="section-note">Exponential time: Held-Karp DP for small sets, then 1-tree branch-and-bound.</p>
+                    <button onclick="runExactTsp()">Exact TSP (optimal tour)</button>
+                    <button id="btnExactCancel" onclick="cancelExactTsp()" disabled>Stop Exact TSP</button>
+                </div>
+            </details>
+
+            <details class="section">
+                <summary>Editor</summary>
+                <div class="section-body">
+                    <label title="Off: a canvas click adds a point. On: a canvas click connects the selected point."><input type="checkbox" id="chkCornerToCorner"> Connect Points</label>
+                    <button id="btn-disconnect" title="Uses the Selected point in Object Occlusion (a canvas click also sets it).">Disconnect Selected Point</button>
+                    <button onclick="runAdjacentBlockSwap()">Swap Adjacent Blocks</button>
+                    <button onclick="runPairedChainRepair()">Paired Chain Repair (slow)</button>
+                    <button onclick="runConvexLayers()">Convex Layers</button>
+                    <button onclick="runMergeLayers()">Merge Layers</button>
+                </div>
+            </details>
+
+            <details class="section" open>
+                <summary>Object Occlusion</summary>
+                <div class="section-body">
+                    <button onclick="objectOcc()">Find Visible (Object Occlusion)</button>
+                    <div class="view-position-row">
+                        <label for="viewPos">Selected point:<input type="number" value="0" min="0" id="viewPos"></label>
+                        <span id="viewPosXmlMatch" title="Matching XML NoktaNo" aria-live="polite">XML: —</span>
+                    </div>
+                    <label><input type="checkbox" id="chkViewVisibles"> View Occlusion Points</label>
+                </div>
+            </details>
+
+            <details class="section">
+                <summary>Inspector</summary>
+                <div class="section-body">
+                    <div id="mouseCoords">Mouse Coordinates: (x, y)</div>
+                    <div id="triInfo"></div>
+                    <div id="kenar0Info"></div>
+                    <div id="kenar1Info"></div>
+                    <div id="kenar2Info"></div>
+                    <div id="ilkKesilenDisKenar"></div>
+                </div>
+            </details>
         </div>
-        <button onclick="runAdjacentBlockSwap()">Swap Adjacent Blocks</button>
-        <button onclick="runPairedChainRepair()">Paired Chain Repair (slow)</button>
-        <button onclick="objectOcc()">Find Visible (Object Occlusion)</button>
-        <button onclick="runConvexLayers()">Convex Layers</button>
-        <button onclick="runMergeLayers()">Merge Layers</button>
-        <div class="point-xml-buttons">
-            <button onclick="copyPoints()">Copy Points</button>
-            <button onclick="pastePoints()">Paste Points</button>
-        </div>
-        <button id="btn-disconnect">Disconnect Selected Point</button>
-        <button onclick="runExactTsp()">Exact TSP (optimal tour)</button>
-        <button id="btnExactCancel" onclick="cancelExactTsp()" disabled>Stop Exact TSP</button>
-        <div class="view-position-row">
-            <label for="viewPos">Viewing position:<input type="number" value="0" min="0" id="viewPos"></label>
-            <span id="viewPosXmlMatch" title="Matching XML NoktaNo" aria-live="polite">XML: —</span>
-        </div>
-        <label><input type="checkbox" id="koptMode"> K-opt Mode</label>
-        <label><input type="checkbox" id="chkCornerToCorner"> Connect Points</label>
-        <label><input type="checkbox" id="chkViewVisibles"> View Occlusion Points</label>
-        <div id="triInfo"></div>
-        <div id="kenar0Info"></div>
-        <div id="kenar1Info"></div>
-        <div id="kenar2Info"></div>
-        <div id="ilkKesilenDisKenar"></div>
         <pre id="doubleBridgeReport"></pre>
     </div>
 
@@ -190,6 +383,25 @@
     ...
 </Points>`;
         document.getElementById("xmlInput").placeholder = xml;
+
+        // Seçilen örnek XML'i examples/ klasöründen alır, textarea'ya yazar ve Raw Route çizer.
+        async function loadExample(select) {
+            const file = select.value;
+            if (!file) return;
+            select.disabled = true;
+            try {
+                const response = await fetch(`examples/${file}`);
+                if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+                document.getElementById("xmlInput").value = await response.text();
+                document.getElementById("randomPoints").checked = false;
+                generatePoints();
+            } catch (e) {
+                console.error("Example could not be loaded:", e);
+                alert(`Example could not be loaded (${file}): ${e.message}`);
+            } finally {
+                select.disabled = false;
+            }
+        }
     </script>
 
     <script src="js/core/classes.js"></script>
@@ -946,7 +1158,7 @@
             document.getElementById("doubleBridgeReport").style.color = "";
             updateReportWithCanvasLength(pointCount === 3
                 ? "Only 3 points: the tour is already optimal, nothing to improve."
-                : "No tour to improve yet: load or generate at least 4 points and click Raw Route.");
+                : "No tour to improve yet: load or generate at least 4 points and click Draw Raw Route.");
             return true;
         }
 
@@ -2777,6 +2989,29 @@
 
         canvas.addEventListener('mouseleave', () => {
             isCursorOverCanvas = false;
+        });
+
+        // Bölümlerin açık/kapalı durumu bu tarayıcıda hatırlanır; depolama yoksa HTML'deki varsayılan kalır.
+        const SECTION_STATE_KEY = "tspSolver.sectionState";
+        function readSectionState() {
+            try {
+                return JSON.parse(localStorage.getItem(SECTION_STATE_KEY)) || {};
+            } catch {
+                return {};
+            }
+        }
+        const sectionState = readSectionState();
+        document.querySelectorAll("details.section").forEach(section => {
+            const name = section.querySelector("summary").textContent.trim();
+            if (typeof sectionState[name] === "boolean") section.open = sectionState[name];
+            section.addEventListener("toggle", () => {
+                sectionState[name] = section.open;
+                try {
+                    localStorage.setItem(SECTION_STATE_KEY, JSON.stringify(sectionState));
+                } catch {
+                    // Depolama kapalıysa durum yalnız bu oturumda kalır.
+                }
+            });
         });
 
         updateViewPositionXmlMatch();
